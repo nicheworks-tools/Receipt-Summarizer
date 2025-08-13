@@ -506,6 +506,19 @@
       return m ? normalizeAmountCurrency(m[0]) : "";
     }
 
+    // 金額文字列を通貨記号 + 3桁区切りに正規化
+function normalizeAmountCurrency(s){
+  const hasUSD = /USD|\$/i.test(s);
+  const hasJPY = /(円|¥|￥)/.test(s);
+  const currency = hasUSD ? "$" : (hasJPY ? "¥" : "");
+  const num = (s||"").replace(/[^0-9.]/g,"");
+  if (!num) return "";
+  const [int, dec] = num.split(".");
+  const intFmt = int.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return currency + intFmt + (dec ? "." + dec : "");
+}
+
+
     function pickDate(R){
       let m = R.match(/(20\d{2})[\/\-.年]\s*(\d{1,2})[\/\-.月]\s*(\d{1,2})\s*日?/);
       if(m) return `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`;
