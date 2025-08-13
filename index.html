@@ -42,27 +42,31 @@
 
   <!-- OCR / PDF libs -->
   <script src="https://unpkg.com/tesseract.js@5.0.3/dist/tesseract.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script>
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
   </script>
 </head>
 <body>
   <div class="wrap">
+    <!-- HERO -->
     <section class="hero">
       <div class="lang">
         <button class="btn" data-lang="ja">日本語</button>
         <button class="btn" data-lang="en">English</button>
       </div>
       <h1 id="t-title">Receipt Summarizer（領収書チェッカー）</h1>
-      <p class="sub" id="t-sub">領収書をアップロードするだけ。<b>日付・店名・金額</b>を自動整理。</p>
+      <p class="sub" id="t-sub">領収書をアップロードするだけ。<b>日付・店名・金額</b>を自動整理。経費計上や確定申告の下ごしらえを数分で。</p>
       <div class="row">
         <button id="tryFree" class="btn acc">無料で試す（2枚まで）</button>
         <a id="unlockPaid" class="btn" href="#" rel="noopener">一括保存を解放（200円）</a>
         <span class="pill"><span id="accessState">未購入</span> <span class="badge" id="sessionBadge">session: guest</span></span>
       </div>
+      <p class="small muted" id="t-note">※ 決済はStripeのワンタイム決済です。決済後にこのページへ戻ると当日セッションが解放されます。</p>
     </section>
 
+    <!-- UPLOAD -->
     <section class="grid" style="margin-top:20px">
       <div class="card">
         <div class="row">
@@ -77,14 +81,25 @@
               <button class="btn" id="selectBtn">ファイル選択</button>
               <button class="btn" id="cameraBtn">カメラで撮影</button>
               <button class="btn" id="clearBtn">リセット</button>
-              <span class="badge" id="countBadge">0件</span>
+              <span class="badge" id="countBadge">0</span>
+            </div>
+            <div class="small muted" style="margin-top:8px" id="t-hint">
+              無料は<strong>2枚</strong>まで解析可能。購入済み/解放中はセッション内で10〜無制限（端末性能に依存）。
             </div>
           </div>
         </div>
       </div>
 
+      <!-- RESULTS -->
       <div class="card">
-        <h3 style="margin:0" id="t-results">抽出結果</h3>
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <h3 style="margin:0" id="t-results">抽出結果</h3>
+          <div class="right">
+            <button class="btn" id="saveTxtBtn" disabled>TXTで保存（課金後）</button>
+            <button class="btn" id="saveCsvBtn" disabled>CSVで保存（課金後）</button>
+          </div>
+        </div>
+        <div class="small muted" style="margin:8px 0" id="t-edit">必要なら編集してから保存してください。</div>
         <div style="overflow:auto">
           <table id="resultTable">
             <thead>
@@ -92,7 +107,7 @@
                 <th id="th-store" style="width:30%">店名</th>
                 <th id="th-date"  style="width:20%">日付</th>
                 <th id="th-total" style="width:20%">合計金額</th>
-                <th id="th-note">メモ</th>
+                <th id="th-note">メモ / カテゴリ</th>
               </tr>
             </thead>
             <tbody id="resultBody"></tbody>
@@ -100,141 +115,529 @@
         </div>
         <div id="log" class="small muted" style="margin-top:12px"></div>
       </div>
+
+      <!-- PRIVACY / FAQ -->
+      <div class="card">
+        <h3 style="margin-top:0" id="t-privacy">プライバシー</h3>
+        <ul id="t-privacy-list">
+          <li><b>完全ブラウザ内処理：</b>アップロードした画像やPDFはサーバーに送信されません。</li>
+          <li>収集するのは、利用枚数や処理時間などの<b>匿名統計情報のみ</b>（現状未収集）。</li>
+          <li>ページを閉じると、内容はすべて破棄されます（セッション解放フラグのみ当日保持）。</li>
+        </ul>
+        <h3 id="t-faq">よくある質問</h3>
+        <p class="small" id="t-faq-1"><b>Q.</b> 暗い/斜めの画像でも読めますか？ <br><b>A.</b> ある程度補正しますが、精度は元データ品質に依存します。</p>
+        <p class="small" id="t-faq-2"><b>Q.</b> 何枚まで処理できますか？ <br><b>A.</b> 無料は2枚まで。購入/解放後は10〜無制限（環境により制限される場合あり）。</p>
+      </div>
+
+      <div class="footer">
+        <div>Niche Works（ニッチワークス）｜お問い合わせ：<span class="mono">{{contact@example.com}}</span></div>
+      </div>
     </section>
   </div>
 
-<script>
-/* ここに I18N や OCR 関数などの既存ロジックを入れる */
-/* 以下は金額抽出強化版の関数群 */
+  <script>
+    // ======== Config ========
+    const PAYMENT_LINK = "https://buy.stripe.com/test_9B6aEZgIgfMEbcKgYK2Ry02";
+    const FREE_CAP = 2;
+    const PAID_HOURS = 24;
+    const PAID_KEY = "rs_paid_session";
+    const PAID_EXP  = "rs_paid_expires";
+    const UI_LANG_KEY = "rs_ui_lang";
+    const LAST_LANG_SS = "rs_last_lang_for_return";
 
-function parseReceipt(text, filename=""){
-  const raw=(text||"").replace(/\r/g,"").trim();
-  const lines=raw.split("\n").map(s=>s.trim()).filter(Boolean);
+    // Tesseract options（自己ホストの worker/wasm を参照）
+    const TESSERACT_OPTS = {
+      workerPath: "/worker.min.js",
+      corePath:   "/tesseract-core.wasm.js",
+      langPath:   "https://tessdata.projectnaptha.com/4.0.0",
+      logger: m => { if (m && m.progress != null) log(`OCR ${Math.round(m.progress*100)}% …`); },
+      tessedit_pageseg_mode: 6,
+      tessedit_ocr_engine_mode: 1,
+      preserve_interword_spaces: "1",
+      tessedit_char_whitelist: "0123456789$¥￥.,:/-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz() "
+    };
 
-  const date = pickDate(raw);
-  let total = pickTotal(lines, raw);
-
-  let store = "";
-  for(let i=0;i<Math.min(lines.length,8);i++){
-    const s=lines[i]; if(!s) continue;
-    if(/[0-9０-９]/.test(s)) continue;
-    if(/(〒|TEL|電話|FAX|URL|http|https|税|合計|領収|明細|RECEIPT|INVOICE|SUBTOTAL|TOTAL|AMOUNT)/i.test(s)) continue;
-    if(s.length<2) continue;
-    store = s.replace(/^[\-\*●\s]+/,"").trim(); if(store) break;
-  }
-  if(!store && filename) store = filename.replace(/\.(pdf|png|jpe?g)$/i,"");
-  return { store, date, total, note:"" };
-}
-
-function pickTotal(lines, raw) {
-  const isNoAmountLine = (s) =>
-    /(TEL|電話|FAX|〒|郵便|住所|http|https)/i.test(s) ||
-    /\b\d{2,4}-\d{2,4}-\d{3,4}\b/.test(s);
-
-  const totalKey = /(合計金額|総合計|合計|ご請求金額|お会計|お支払金額|税込合計|TOTAL|AMOUNT DUE|Grand Total|Balance Due)/i;
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (isNoAmountLine(line)) continue;
-    if (totalKey.test(line.replace(/\s/g, ""))) {
-      const c0 = findAmountStrict(line);
-      if (c0) return c0;
-      if (i + 1 < lines.length && !isNoAmountLine(lines[i + 1])) {
-        const c1 = findAmountStrict(lines[i + 1]); if (c1) return c1;
+    // ======== I18N ========
+    const I18N = {
+      ja: {
+        title:"Receipt Summarizer（領収書チェッカー）",
+        sub:"領収書をアップロードするだけ。<b>日付・店名・金額</b>を自動整理。経費計上や確定申告の下ごしらえを数分で。",
+        tryFree:"無料で試す（2枚まで）",
+        unlock:"一括保存を解放（200円）",
+        stateGuest:"未購入", statePro:"解放中（購入済）",
+        note:"※ 決済はStripeのワンタイム決済です。決済後にこのページへ戻ると当日セッションが解放されます。",
+        drop1:"ここにドラッグ＆ドロップ", drop2:"または", drop3:"ファイルを選択", drop4:"対応：JPG / PNG / PDF",
+        hint:"無料は<strong>2枚</strong>まで解析可能。購入済み/解放中はセッション内で10〜無制限（端末性能に依存）。",
+        results:"抽出結果",
+        saveTxt:"TXTで保存（課金後）", saveCsv:"CSVで保存（課金後）",
+        edit:"必要なら編集してから保存してください。",
+        thStore:"店名", thDate:"日付", thTotal:"合計金額", thNote:"メモ / カテゴリ",
+        privacy:"プライバシー",
+        p1:"<b>完全ブラウザ内処理：</b>アップロードした画像やPDFはサーバーに送信されません。",
+        p2:"収集するのは、利用枚数や処理時間などの<b>匿名統計情報のみ</b>（現状未収集）。",
+        p3:"ページを閉じると、内容はすべて破棄されます（セッション解放フラグのみ当日保持）。",
+        faq:"よくある質問",
+        q1:"<b>Q.</b> 暗い/斜めの画像でも読めますか？ <br><b>A.</b> ある程度補正しますが、精度は元データ品質に依存します。",
+        q2:"<b>Q.</b> 何枚まで処理できますか？ <br><b>A.</b> 無料は2枚まで。購入/解放後は10〜無制限（環境により制限される場合あり）。",
+        countUnit:"件",
+        resetDone:"リセットしました。", start:"OCR開始：順次処理します…",
+        freeCapWarn:(cap)=>`無料枠は ${cap} 枚までです。課金後、リロードなしで続きが処理できます。`,
+        done:(n,paid)=>`処理完了：${n}件（${paid?"解放中":"無料枠内"}）`,
+        alertNeedPay:"保存は課金後に解放されます。「一括保存を解放（200円）」から決済してください。",
+        alertNoData:"保存対象がありません。先に領収書を解析してください。",
+        choose:"ファイル選択", camera:"カメラで撮影", reset:"リセット", err:"エラー：",
+      },
+      en: {
+        title:"Receipt Summarizer",
+        sub:"Just upload receipts. Automatically extracts <b>Date / Store / Total</b> for quick bookkeeping.",
+        tryFree:"Try free (up to 2)",
+        unlock:"Unlock bulk save (¥200)",
+        stateGuest:"Locked", statePro:"Unlocked (Pro)",
+        note:"Stripe one-time payment. After checkout, return to this page to unlock for today.",
+        drop1:"Drag & drop files here", drop2:"or", drop3:"Choose files", drop4:"Supported: JPG / PNG / PDF",
+        hint:"Free plan: up to <strong>2</strong> receipts. After unlock: 10 to unlimited per session (device-dependent).",
+        results:"Results",
+        saveTxt:"Save as TXT (after unlock)", saveCsv:"Save as CSV (after unlock)",
+        edit:"Edit values if needed before saving.",
+        thStore:"Store", thDate:"Date", thTotal:"Total", thNote:"Note / Category",
+        privacy:"Privacy",
+        p1:"<b>Browser-only processing:</b> files are not sent to any server.",
+        p2:"We only collect anonymous statistics like counts/time (currently none).",
+        p3:"Close the page and all data is cleared (only unlock flag persists for today).",
+        faq:"FAQ",
+        q1:"<b>Q.</b> Can it read dark or skewed images? <br><b>A.</b> Basic correction is applied, but quality depends on the original.",
+        q2:"<b>Q.</b> How many can I process? <br><b>A.</b> Free: 2. After unlock: 10 to unlimited (may vary by environment).",
+        countUnit:"", resetDone:"Reset.", start:"OCR started… processing in sequence.",
+        freeCapWarn:(cap)=>`Free plan allows up to ${cap} receipts. You can continue immediately after unlocking.`,
+        done:(n,paid)=>`Done: processed ${n} (${paid?"Pro":"Free"})`,
+        alertNeedPay:"Saving is available after unlocking. Please use the Unlock button.",
+        alertNoData:"No data to save. Please OCR receipts first.",
+        choose:"Choose files", camera:"Use camera", reset:"Reset", err:"Error: ",
       }
-      if (i + 2 < lines.length && !isNoAmountLine(lines[i + 2])) {
-        const c2 = findAmountStrict(lines[i + 2]); if (c2) return c2;
+    };
+
+    // ======== Lang helpers ========
+    function getLangFromURL(){ const p = new URLSearchParams(location.search).get("lang"); return (p==="en"||p==="ja")?p:null; }
+    function getLang(){ return getLangFromURL() || localStorage.getItem(UI_LANG_KEY) || sessionStorage.getItem(LAST_LANG_SS) || "ja"; }
+    function setLang(l){ localStorage.setItem(UI_LANG_KEY,l); applyI18n(); }
+    function applyI18n(){
+      const L = I18N[getLang()];
+      document.documentElement.lang = (getLang()==="en"?"en":"ja");
+      text("t-title", L.title); html("t-sub", L.sub);
+      text("tryFree", L.tryFree); text("unlockPaid", L.unlock);
+      text("accessState", isPaidSession()?L.statePro:L.stateGuest);
+      text("sessionBadge", "session: " + (isPaidSession()?"pro":"guest"));
+      text("t-note", L.note);
+      text("selectBtn", L.choose); text("cameraBtn", L.camera); text("clearBtn", L.reset);
+      text("countBadge", `${queue.length}${getLang()==="ja"?L.countUnit:""}`);
+      text("t-drop-1", L.drop1); text("t-drop-2", L.drop2); text("t-drop-3", L.drop3); text("t-drop-4", L.drop4);
+      html("t-hint", L.hint);
+      text("t-results", L.results); text("saveTxtBtn", L.saveTxt); text("saveCsvBtn", L.saveCsv);
+      text("th-store", L.thStore); text("th-date", L.thDate); text("th-total", L.thTotal); text("th-note", L.thNote);
+      text("t-edit", L.edit);
+      text("t-privacy", L.privacy); html("t-privacy-list", `<li>${L.p1}</li><li>${L.p2}</li><li>${L.p3}</li>`);
+      text("t-faq", L.faq); html("t-faq-1", L.q1); html("t-faq-2", L.q2);
+    }
+    function text(id, s){ const el=document.getElementById(id); if(el) el.textContent=s; }
+    function html(id, s){ const el=document.getElementById(id); if(el) el.innerHTML=s; }
+
+    // ======== Pay session ========
+    function nowTs(){ return Date.now(); }
+    function setPaidSession(){
+      localStorage.setItem(PAID_KEY,"true");
+      localStorage.setItem(PAID_EXP, String(nowTs()+PAID_HOURS*60*60*1000));
+      if (saveTxtBtn) saveTxtBtn.disabled=false;
+      if (saveCsvBtn) saveCsvBtn.disabled=false;
+      applyI18n();
+      log(`<span class="ok">Pro unlocked.</span>`);
+    }
+    function isPaidSession(){
+      const flag = localStorage.getItem(PAID_KEY)==="true";
+      const exp  = Number(localStorage.getItem(PAID_EXP)||0);
+      if(!flag) return false;
+      if(nowTs()>exp){ localStorage.removeItem(PAID_KEY); localStorage.removeItem(PAID_EXP); return false; }
+      return true;
+    }
+
+    // ======== Elements / State ========
+    let drop, fileInput, selectBtn, cameraBtn, clearBtn, countBadge, resultBody, logEl, saveTxtBtn, saveCsvBtn;
+    let queue = []; let results = []; let processing = false;
+
+    function log(msg){ if(logEl) logEl.innerHTML = msg; }
+    window.addEventListener("error",(e)=>{ try{ log(`<span class="err">${(I18N[getLang()]||I18N.ja).err}${e.message||e}</span>`);}catch(_){} });
+
+    // ======== Bootstrap ========
+    function bootstrap(){
+      drop       = document.getElementById("dropzone");
+      fileInput  = document.getElementById("fileInput");
+      selectBtn  = document.getElementById("selectBtn");
+      cameraBtn  = document.getElementById("cameraBtn");
+      clearBtn   = document.getElementById("clearBtn");
+      countBadge = document.getElementById("countBadge");
+      resultBody = document.getElementById("resultBody");
+      logEl      = document.getElementById("log");
+      saveTxtBtn = document.getElementById("saveTxtBtn");
+      saveCsvBtn = document.getElementById("saveCsvBtn");
+
+      // 戻り時の?pro=1
+      const params = new URLSearchParams(location.search);
+      if(params.get("pro")==="1"){ setPaidSession(); }
+
+      // 言語維持
+      const ssLang = sessionStorage.getItem(LAST_LANG_SS);
+      if(ssLang){ localStorage.setItem(UI_LANG_KEY, ssLang); }
+      const urlLang = getLangFromURL(); if(urlLang){ localStorage.setItem(UI_LANG_KEY, urlLang); }
+      applyI18n();
+
+      // 言語切替
+      document.querySelectorAll(".lang button").forEach(b=>{ b.onclick = ()=> setLang(b.dataset.lang); });
+
+      // DnD
+      drop.ondragover =(e)=>{ e.preventDefault(); drop.classList.add("dragover"); };
+      drop.ondragleave=()=> drop.classList.remove("dragover");
+      drop.ondrop     =(e)=>{ e.preventDefault(); drop.classList.remove("dragover"); handleFiles(e.dataTransfer.files); };
+      drop.onclick    =()=> fileInput.click();
+
+      // File input
+      selectBtn.onclick = ()=> fileInput.click();
+      fileInput.onchange = ()=> handleFiles(fileInput.files);
+
+      // クリア
+      clearBtn.onclick = ()=>{
+        queue=[]; results=[]; processing=false; renderTable(); updateCount();
+        log((I18N[getLang()]||I18N.ja).resetDone);
+      };
+
+      // 決済
+      document.getElementById("unlockPaid").onclick = (e)=>{
+        e.preventDefault();
+        sessionStorage.setItem(LAST_LANG_SS, getLang());
+        window.open(PAYMENT_LINK,"_blank","noopener");
+      };
+
+      // カメラ
+      cameraBtn.onclick = async ()=>{
+        try{
+          const stream = await navigator.mediaDevices.getUserMedia({ video:{facingMode:{ideal:"environment"}}, audio:false });
+          const video=document.createElement("video"); video.srcObject=stream; await video.play();
+          const canvas=document.createElement("canvas");
+          canvas.width=video.videoWidth||1280; canvas.height=video.videoHeight||720;
+          canvas.getContext("2d").drawImage(video,0,0,canvas.width,canvas.height);
+          stream.getTracks().forEach(t=>t.stop());
+          const blob = await new Promise(res=>canvas.toBlob(res,"image/jpeg",0.9));
+          const file = new File([blob], `camera_${Date.now()}.jpg`, { type:"image/jpeg" });
+          queue.push({ name:file.name, file }); updateCount(); processQueue();
+        }catch(e){
+          alert(getLang()==="en" ? "Could not access camera. Please pick a photo from library." : "カメラを起動できませんでした。写真から選択してください。");
+        }
+      };
+
+      // CTAスクロール
+      document.getElementById("tryFree").onclick = ()=> drop.scrollIntoView({behavior:"smooth",block:"center"});
+
+      // 保存
+      saveTxtBtn.onclick = ()=>{
+        if(!guardPaid()) return;
+        const lines=results.map(r=>`Store: ${r.store}\nDate: ${r.date}\nTotal: ${r.total}\nNote: ${r.note||""}\n---`).join("\n");
+        download("receipts.txt", lines);
+      };
+      saveCsvBtn.onclick = ()=>{
+        if(!guardPaid()) return;
+        const header=["store","date","total","note"].join(",");
+        const rows=results.map(r=>[csvEsc(r.store),csvEsc(r.date),csvEsc(r.total),csvEsc(r.note||"")].join(","));
+        download("receipts.csv",[header,...rows].join("\n"));
+      };
+
+      updateCount();
+      saveTxtBtn.disabled = !isPaidSession();
+      saveCsvBtn.disabled = !isPaidSession();
+      log("");
+    }
+    document.addEventListener("DOMContentLoaded", bootstrap);
+
+    // ======== Files ========
+    function updateCount(){ const L=I18N[getLang()]; countBadge.textContent = `${queue.length}${getLang()==="ja"?L.countUnit:""}`; }
+    function handleFiles(fileList){
+      const arr = Array.from(fileList||[]);
+      for(const f of arr){ if(/\.(pdf|png|jpg|jpeg)$/i.test(f.name)) queue.push({name:f.name,file:f}); }
+      updateCount(); processQueue();
+    }
+
+    // ======== OCR / PDF smart ========
+    async function ensureOCR(imageOrDataUrl){
+      const { data } = await Tesseract.recognize(imageOrDataUrl, "jpn+eng", TESSERACT_OPTS);
+      return data.text || "";
+    }
+
+    async function readAsTextViaOCR(file){
+      if (/\.pdf$/i.test(file.name)) return await readPdfSmart(file);
+      return await ocrImageSmart(file);
+    }
+
+    // PDF：テキスト直抽出 → だめならレンダ→OCR
+    async function readPdfSmart(file){
+      const buf = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+      let textAll = "";
+      for (let p=1; p<=pdf.numPages; p++){
+        const page = await pdf.getPage(p);
+        const tc = await page.getTextContent();
+        const s  = tc.items.map(it=>it.str).join("\n").trim();
+        if (s.length > 10) textAll += "\n" + s;
+      }
+      if (textAll.trim().length >= 10) return textAll;
+
+      // フォールバック：レンダ→OCR
+      let ocrAll = "";
+      for (let p=1; p<=pdf.numPages; p++){
+        const page = await pdf.getPage(p);
+        const v = page.getViewport({scale: 2.0});
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        canvas.width = v.width; canvas.height = v.height;
+        await page.render({canvasContext:ctx,viewport:v}).promise;
+        const dataUrl = canvas.toDataURL("image/png");
+        ocrAll += "\n" + await ensureOCR(dataUrl);
+        await new Promise(r=>setTimeout(r,20));
+      }
+      return ocrAll;
+    }
+
+    // 画像：軽い前処理（グレイスケール＋コントラスト）
+    async function ocrImageSmart(file){
+      const img = await createImageBitmap(file);
+      const scale = Math.min(2000/Math.max(img.width,img.height), 2.5);
+      const w = Math.round(img.width * Math.max(1, scale));
+      const h = Math.round(img.height* Math.max(1, scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, w, h);
+
+      const imgData = ctx.getImageData(0,0,w,h);
+      const d = imgData.data;
+      for (let i=0;i<d.length;i+=4){
+        const g = (d[i]*0.299 + d[i+1]*0.587 + d[i+2]*0.114);
+        const c = Math.max(0, Math.min(255, (g-128)*1.2 + 128 + 5 ));
+        d[i]=d[i+1]=d[i+2]=c;
+      }
+      ctx.putImageData(imgData,0,0);
+
+      const dataUrl = canvas.toDataURL("image/png");
+      return await ensureOCR(dataUrl);
+    }
+
+    // ======== Queue Processor ========
+    async function processQueue(){
+      if(processing) return;
+      if(queue.length===0){ log(""); return; }
+      processing = true;
+      const L = I18N[getLang()];
+      const paid = isPaidSession();
+      const allowed = paid ? Infinity : FREE_CAP;
+      let processed = 0;
+      log(L.start);
+
+      try{
+        while(queue.length>0){
+          if(processed >= allowed){
+            log(`<span class="warn">${L.freeCapWarn(FREE_CAP)}</span>`);
+            break;
+          }
+          const item = queue.shift();
+          processed++;
+          const text = await readAsTextViaOCR(item.file);
+          const parsed = parseReceipt(text, item.name);
+          results.push(parsed);
+          renderTable();
+          await new Promise(r=>setTimeout(r,60));
+        }
+        if(processed>0) log(`<span class="ok">${L.done(processed, paid)}</span>`);
+      }catch(err){
+        console.error(err);
+        log(`<span class="err">${(I18N[getLang()]||I18N.ja).err}${String(err && err.message || err)}</span>`);
+      }finally{
+        processing = false;
+        saveTxtBtn.disabled = !isPaidSession();
+        saveCsvBtn.disabled = !isPaidSession();
       }
     }
-  }
 
-  const subtotalKey = /(小計|SUBTOTAL)/i;
-  const taxKey = /(税|消費税|税込|TAX)/i;
-  let subtotal = null, tax = null;
-  for (let i = 0; i < lines.length; i++) {
-    const s = lines[i]; if (isNoAmountLine(s)) continue;
-    if (subtotal === null && subtotalKey.test(s)) {
-      subtotal = findAmountStrict(s) || (i + 1 < lines.length ? findAmountStrict(lines[i + 1]) : null);
+    // ======== Parsing (JA/EN) ========
+    function parseReceipt(text, filename=""){
+      const raw=(text||"").replace(/\r/g,"").trim();
+      const lines=raw.split("\n").map(s=>s.trim()).filter(Boolean);
+
+      const date  = pickDate(raw);
+      const total = pickTotal(lines, raw);
+
+      // 店名：先頭〜8行から、住所/連絡先/見出しを除く最初の文字行
+      let store = "";
+      const ban = /(〒|郵便|TEL|電話|FAX|URL|http|https|税|合計|ご請求|領収|明細|RECEIPT|INVOICE|SUBTOTAL|TOTAL|AMOUNT|小計|お会計)/i;
+      for(let i=0;i<Math.min(lines.length,8);i++){
+        const s=lines[i]; if(!s) continue;
+        if(/[0-9０-９]/.test(s)) continue;
+        if(ban.test(s)) continue;
+        if(s.length<2) continue;
+        store = s.replace(/^[\-\*●\s]+/,"").trim(); if(store) break;
+      }
+      if(!store && filename) store = filename.replace(/\.(pdf|png|jpe?g)$/i,"");
+      return { store, date, total, note:"" };
     }
-    if (tax === null && taxKey.test(s)) {
-      tax = findAmountStrict(s) || (i + 1 < lines.length ? findAmountStrict(lines[i + 1]) : null);
+
+    // ---- 金額抽出（強化） ----
+    function pickTotal(lines, raw) {
+      const isNoAmountLine = (s) =>
+        /(TEL|電話|FAX|〒|郵便|住所|http|https)/i.test(s) ||
+        /\b\d{2,4}-\d{2,4}-\d{3,4}\b/.test(s);
+
+      const totalKey = /(合計金額|総合計|合計|ご請求金額|お会計|お支払金額|税込合計|TOTAL|AMOUNT DUE|Grand Total|Balance Due)/i;
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (isNoAmountLine(line)) continue;
+        if (totalKey.test(line.replace(/\s/g, ""))) {
+          const c0 = findAmountStrict(line);
+          if (c0) return c0;
+          if (i + 1 < lines.length && !isNoAmountLine(lines[i + 1])) {
+            const c1 = findAmountStrict(lines[i + 1]); if (c1) return c1;
+          }
+          if (i + 2 < lines.length && !isNoAmountLine(lines[i + 2])) {
+            const c2 = findAmountStrict(lines[i + 2]); if (c2) return c2;
+          }
+        }
+      }
+
+      const subtotalKey = /(小計|SUBTOTAL)/i;
+      const taxKey = /(税|消費税|税込|TAX)/i;
+      let subtotal = null, tax = null;
+      for (let i = 0; i < lines.length; i++) {
+        const s = lines[i]; if (isNoAmountLine(s)) continue;
+        if (subtotal === null && subtotalKey.test(s)) {
+          subtotal = findAmountStrict(s) || (i + 1 < lines.length ? findAmountStrict(lines[i + 1]) : null);
+        }
+        if (tax === null && taxKey.test(s)) {
+          tax = findAmountStrict(s) || (i + 1 < lines.length ? findAmountStrict(lines[i + 1]) : null);
+        }
+      }
+      if (subtotal && tax) {
+        const sum = sumCurrency(subtotal, tax);
+        if (sum) return sum;
+      }
+
+      // フォールバック：通貨付きを最優先
+      const yenOrDollar = [];
+      const numericLoose = [];
+      for (const s of lines) {
+        if (isNoAmountLine(s)) continue;
+        const amounts = allAmountsInLine(s);
+        for (const a of amounts) {
+          if (/[円¥￥$]|USD/i.test(a)) yenOrDollar.push(a);
+          else numericLoose.push(a);
+        }
+      }
+      const best = (list) => {
+        let pick = "", max = 0;
+        for (const a of list) {
+          const v = Number(a.replace(/[^\d.]/g, "") || 0);
+          if (v > max) { max = v; pick = a; }
+        }
+        return pick ? normalizeAmountCurrency(pick) : "";
+      };
+      return best(yenOrDollar) || best(numericLoose) || "";
     }
-  }
-  if (subtotal && tax) {
-    const sum = sumCurrency(subtotal, tax);
-    if (sum) return sum;
-  }
 
-  const yenOrDollar = [];
-  const numericLoose = [];
-  for (const s of lines) {
-    if (isNoAmountLine(s)) continue;
-    const amounts = allAmountsInLine(s);
-    for (const a of amounts) {
-      if (/[円¥￥$]|USD/i.test(a)) yenOrDollar.push(a);
-      else numericLoose.push(a);
+    function findAmountStrict(line) {
+      if (/\b\d{2,4}-\d{2,4}-\d{3,4}\b/.test(line)) return "";
+      if (/〒\s*\d{3}-\d{4}/.test(line)) return "";
+      let m = line.match(/([¥￥$]\s*\d{1,3}(?:[,\d]{3})*(?:\.\d{1,2})?)|(\d{1,3}(?:[,\d]{3})*(?:\.\d{1,2})?\s*(円|¥|￥|USD|\$))/i);
+      if (m) return normalizeAmountCurrency(m[0]);
+      m = line.match(/\b\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?\b/);
+      if (m) return normalizeAmountCurrency(m[0]);
+      m = line.match(/\b\d{4,}(?:\.\d{1,2})?\b/);
+      if (m) return normalizeAmountCurrency(m[0]);
+      return "";
     }
-  }
-  const best = (list) => {
-    let pick = "", max = 0;
-    for (const a of list) {
-      const v = Number(a.replace(/[^\d.]/g, "") || 0);
-      if (v > max) { max = v; pick = a; }
+
+    function allAmountsInLine(line) {
+      const out = [];
+      const re = /([¥￥$]?\s*\d{1,3}(?:[,\d]{3})*(?:\.\d{1,2})?\s*(円|¥|￥|\$|USD)?)/gi;
+      let m;
+      while ((m = re.exec(line)) !== null) {
+        const s = (m[0] || "").trim();
+        if (/\d-\d|〒\s*\d{3}-\d{4}/.test(s)) continue;
+        if (/\b20\d{2}\b/.test(s) && !/[円¥￥$]/.test(s)) continue;
+        if (s) out.push(s);
+      }
+      return out;
     }
-    return pick ? normalizeAmountCurrency(pick) : "";
-  };
-  return best(yenOrDollar) || best(numericLoose) || "";
-}
 
-function findAmountStrict(line) {
-  if (/\b\d{2,4}-\d{2,4}-\d{3,4}\b/.test(line)) return "";
-  if (/〒\s*\d{3}-\d{4}/.test(line)) return "";
+    function sumCurrency(a, b) {
+      const curA = /USD|\$/i.test(a) ? "$" : /(円|¥|￥)/.test(a) ? "¥" : "";
+      const curB = /USD|\$/i.test(b) ? "$" : /(円|¥|￥)/.test(b) ? "¥" : "";
+      if (curA && curA === curB) {
+        const va = Number(a.replace(/[^\d.]/g, "") || 0);
+        const vb = Number(b.replace(/[^\d.]/g, "") || 0);
+        return normalizeAmountCurrency(curA + String(va + vb));
+      }
+      return "";
+    }
 
-  let m = line.match(/([¥￥$]\s*\d{1,3}(?:[,\d]{3})*(?:\.\d{1,2})?)|(\d{1,3}(?:[,\d]{3})*(?:\.\d{1,2})?\s*(円|¥|￥|USD|\$))/i);
-  if (m) return normalizeAmountCurrency(m[0]);
+    function normalizeAmountCurrency(s){
+      const hasUSD = /USD|\$/i.test(s);
+      const hasJPY = /(円|¥|￥)/.test(s);
+      const currency = hasUSD ? "$" : (hasJPY ? "¥" : "");
+      const num = (s||"").replace(/[^0-9.]/g,"");
+      if (!num) return "";
+      const [int, dec] = num.split(".");
+      const intFmt = int.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      return currency + intFmt + (dec ? "." + dec : "");
+    }
 
-  m = line.match(/\b\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?\b/);
-  if (m) return normalizeAmountCurrency(m[0]);
+    // ======== Render / Save ========
+    function renderTable(){
+      const L=I18N[getLang()];
+      resultBody.innerHTML="";
+      results.forEach((r,idx)=>{
+        const tr=document.createElement("tr");
+        tr.innerHTML=`
+          <td><input type="text" value="${esc(r.store)}" data-idx="${idx}" data-key="store"/></td>
+          <td><input type="text" value="${esc(r.date)}"  data-idx="${idx}" data-key="date"/></td>
+          <td><input type="text" value="${esc(r.total)}" data-idx="${idx}" data-key="total"/></td>
+          <td><input type="text" value="${esc(r.note||"")}" data-idx="${idx}" data-key="note"/></td>`;
+        resultBody.appendChild(tr);
+      });
+      resultBody.querySelectorAll("input").forEach(inp=>{
+        inp.addEventListener("input",(e)=>{ const i=+e.target.dataset.idx; const k=e.target.dataset.key; results[i][k]=e.target.value; });
+      });
+      saveTxtBtn.disabled=!isPaidSession();
+      saveCsvBtn.disabled=!isPaidSession();
+      text("accessState", isPaidSession()?L.statePro:L.stateGuest);
+      text("sessionBadge", "session: " + (isPaidSession()?"pro":"guest"));
+      text("countBadge", `${queue.length}${getLang()==="ja"?L.countUnit:""}`);
+    }
+    function esc(s){ return (s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
 
-  m = line.match(/\b\d{4,}(?:\.\d{1,2})?\b/);
-  if (m) return normalizeAmountCurrency(m[0]);
+    function guardPaid(){
+      const L=I18N[getLang()];
+      if(!isPaidSession()){ alert(L.alertNeedPay); return false; }
+      if(results.length===0){ alert(L.alertNoData); return false; }
+      return true;
+    }
+    function csvEsc(s=""){ return /[",\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s; }
+    function download(name, content){
+      const blob=new Blob([content],{type:"text/plain;charset=utf-8"});
+      const url=URL.createObjectURL(blob); const a=document.createElement("a");
+      a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url);
+    }
 
-  return "";
-}
-
-function allAmountsInLine(line) {
-  const out = [];
-  const re = /([¥￥$]?\s*\d{1,3}(?:[,\d]{3})*(?:\.\d{1,2})?\s*(円|¥|￥|\$|USD)?)/gi;
-  let m;
-  while ((m = re.exec(line)) !== null) {
-    const s = (m[0] || "").trim();
-    if (/\d-\d|〒\s*\d{3}-\d{4}/.test(s)) continue;
-    if (/\b20\d{2}\b/.test(s) && !/[円¥￥$]/.test(s)) continue;
-    if (s) out.push(s);
-  }
-  return out;
-}
-
-function sumCurrency(a, b) {
-  const curA = /USD|\$/i.test(a) ? "$" : /(円|¥|￥)/.test(a) ? "¥" : "";
-  const curB = /USD|\$/i.test(b) ? "$" : /(円|¥|￥)/.test(b) ? "¥" : "";
-  if (curA && curA === curB) {
-    const va = Number(a.replace(/[^\d.]/g, "") || 0);
-    const vb = Number(b.replace(/[^\d.]/g, "") || 0);
-    return normalizeAmountCurrency(curA + String(va + vb));
-  }
-  return "";
-}
-
-function normalizeAmountCurrency(s){
-  const hasUSD = /USD|\$/i.test(s);
-  const hasJPY = /(円|¥|￥)/.test(s);
-  const currency = hasUSD ? "$" : (hasJPY ? "¥" : "");
-  const num = (s||"").replace(/[^0-9.]/g,"");
-  if (!num) return "";
-  const [int, dec] = num.split(".");
-  const intFmt = int.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return currency + intFmt + (dec ? "." + dec : "");
-}
-</script>
+    // ======== Boot ========
+    (function boot(){
+      // 戻り後の言語復元
+      const ssLang = sessionStorage.getItem(LAST_LANG_SS);
+      if(ssLang){ localStorage.setItem(UI_LANG_KEY, ssLang); }
+      const urlLang=getLangFromURL(); if(urlLang) localStorage.setItem(UI_LANG_KEY,urlLang);
+      applyI18n();
+    })();
+  </script>
 </body>
 </html>
