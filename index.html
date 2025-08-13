@@ -40,14 +40,14 @@
     .warn{color:#fbbf24} .err{color:#f87171} .ok{color:#34d399}
   </style>
 
-  <!-- OCR / PDF libs -->
-  <script src="https://unpkg.com/tesseract.js@5.0.3/dist/tesseract.min.js"></script>
-<!-- PDF.js (stable global build) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script>
-  window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
-</script>
-
+  <!-- OCR core (library only。worker/wasmは自己ホストを使用) -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.3/dist/tesseract.min.js"></script>
+  <!-- PDF.js v2（グローバル版） -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script>
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
+  </script>
 </head>
 <body>
   <div class="wrap">
@@ -138,25 +138,21 @@
 
   <script>
     // ======== Config ========
-    const PAYMENT_LINK = "https://buy.stripe.com/test_9B6aEZgIgfMEbcKgYK2Ry02"; // ← Stripe Payment Link（テスト/本番を差し替え）
+    const PAYMENT_LINK = "https://buy.stripe.com/test_9B6aEZgIgfMEbcKgYK2Ry02"; // ← テスト用Payment Link
     const FREE_CAP = 2;
     const PAID_HOURS = 24;
     const PAID_KEY = "rs_paid_session";
     const PAID_EXP  = "rs_paid_expires";
     const UI_LANG_KEY = "rs_ui_lang";
-    const LAST_LANG_SS = "rs_last_lang_for_return"; // 決済前に一時保存
+    const LAST_LANG_SS = "rs_last_lang_for_return"; // 決済前に保存→戻り後の混在防止
 
-    // Tesseractのパスを明示（安定化）
-const TESSERACT_OPTS = {
-  workerPath: "/worker.min.js",
-  corePath:   "/tesseract-core.wasm.js",
-  langPath:   "https://tessdata.projectnaptha.com/4.0.0",
-  logger: m => {
-    if (m && m.progress != null) {
-      log(`OCR ${Math.round(m.progress*100)}% …`);
-    }
-  }
-};
+    // Tesseract（自己ホストの worker/wasm を使う）
+    const TESSERACT_OPTS = {
+      workerPath: "/worker.min.js",
+      corePath:   "/tesseract-core.wasm.js",
+      langPath:   "https://tessdata.projectnaptha.com/4.0.0",
+      logger: m => { if (m && m.progress != null) log(`OCR ${Math.round(m.progress*100)}% …`); }
+    };
 
     // ======== I18N ========
     const I18N = {
@@ -240,43 +236,23 @@ const TESSERACT_OPTS = {
     function getLangFromURL(){ const p = new URLSearchParams(location.search).get("lang"); return (p==="en"||p==="ja")?p:null; }
     function getLang(){ return getLangFromURL() || localStorage.getItem(UI_LANG_KEY) || sessionStorage.getItem(LAST_LANG_SS) || "ja"; }
     function setLang(l){ localStorage.setItem(UI_LANG_KEY,l); applyI18n(); }
-
     function applyI18n(){
       const L = I18N[getLang()];
       document.documentElement.lang = (getLang()==="en"?"en":"ja");
-      // hero
-      text("t-title", L.title);
-      html("t-sub", L.sub);
-      text("tryFree", L.tryFree);
-      text("unlockPaid", L.unlock);
+      text("t-title", L.title); html("t-sub", L.sub);
+      text("tryFree", L.tryFree); text("unlockPaid", L.unlock);
       text("accessState", isPaidSession()?L.statePro:L.stateGuest);
       text("sessionBadge", "session: " + (isPaidSession()?"pro":"guest"));
       text("t-note", L.note);
-      // upload
-      text("selectBtn", L.choose);
-      text("cameraBtn", L.camera);
-      text("clearBtn", L.reset);
+      text("selectBtn", L.choose); text("cameraBtn", L.camera); text("clearBtn", L.reset);
       text("countBadge", `${queue.length}${getLang()==="ja"?L.countUnit:""}`);
-      text("t-drop-1", L.drop1);
-      text("t-drop-2", L.drop2);
-      text("t-drop-3", L.drop3);
-      text("t-drop-4", L.drop4);
+      text("t-drop-1", L.drop1); text("t-drop-2", L.drop2); text("t-drop-3", L.drop3); text("t-drop-4", L.drop4);
       html("t-hint", L.hint);
-      // results
-      text("t-results", L.results);
-      text("saveTxtBtn", L.saveTxt);
-      text("saveCsvBtn", L.saveCsv);
-      text("th-store", L.thStore);
-      text("th-date",  L.thDate);
-      text("th-total", L.thTotal);
-      text("th-note",  L.thNote);
+      text("t-results", L.results); text("saveTxtBtn", L.saveTxt); text("saveCsvBtn", L.saveCsv);
+      text("th-store", L.thStore); text("th-date", L.thDate); text("th-total", L.thTotal); text("th-note", L.thNote);
       text("t-edit", L.edit);
-      // privacy + FAQ
-      text("t-privacy", L.privacy);
-      html("t-privacy-list", `<li>${L.p1}</li><li>${L.p2}</li><li>${L.p3}</li>`);
-      text("t-faq", L.faq);
-      html("t-faq-1", L.q1);
-      html("t-faq-2", L.q2);
+      text("t-privacy", L.privacy); html("t-privacy-list", `<li>${L.p1}</li><li>${L.p2}</li><li>${L.p3}</li>`);
+      text("t-faq", L.faq); html("t-faq-1", L.q1); html("t-faq-2", L.q2);
     }
     function text(id, s){ const el=document.getElementById(id); if(el) el.textContent=s; }
     function html(id, s){ const el=document.getElementById(id); if(el) el.innerHTML=s; }
@@ -286,9 +262,8 @@ const TESSERACT_OPTS = {
     function setPaidSession(){
       localStorage.setItem(PAID_KEY,"true");
       localStorage.setItem(PAID_EXP, String(nowTs()+PAID_HOURS*60*60*1000));
-      // 強制UI更新
-      document.getElementById("saveTxtBtn").disabled=false;
-      document.getElementById("saveCsvBtn").disabled=false;
+      if (saveTxtBtn) saveTxtBtn.disabled=false;
+      if (saveCsvBtn) saveCsvBtn.disabled=false;
       applyI18n();
       log(`<span class="ok">Pro unlocked.</span>`);
     }
@@ -300,81 +275,100 @@ const TESSERACT_OPTS = {
       return true;
     }
 
-    // URL ?pro=1 → 解放（言語も復元）
-    (function initOnLoad(){
+    // ======== Elements (後で取得) / State ========
+    let drop, fileInput, selectBtn, cameraBtn, clearBtn, countBadge, resultBody, logEl, saveTxtBtn, saveCsvBtn;
+    let queue = []; let results = []; let processing = false;
+
+    // ======== Logging / Guard ========
+    function log(msg){ if(logEl) logEl.innerHTML = msg; }
+    window.addEventListener("error",(e)=>{ try{ log(`<span class="err">${(I18N[getLang()]||I18N.ja).err}${e.message||e}</span>`);}catch(_){} });
+
+    // ======== Bootstrap（決済戻りでも毎回ここを通す） ========
+    function bootstrap(){
+      drop       = document.getElementById("dropzone");
+      fileInput  = document.getElementById("fileInput");
+      selectBtn  = document.getElementById("selectBtn");
+      cameraBtn  = document.getElementById("cameraBtn");
+      clearBtn   = document.getElementById("clearBtn");
+      countBadge = document.getElementById("countBadge");
+      resultBody = document.getElementById("resultBody");
+      logEl      = document.getElementById("log");
+      saveTxtBtn = document.getElementById("saveTxtBtn");
+      saveCsvBtn = document.getElementById("saveCsvBtn");
+
+      // 1) pro=1 を最初に処理
       const params = new URLSearchParams(location.search);
       if(params.get("pro")==="1"){ setPaidSession(); }
-    })();
 
-    // ======== Elements / Events ========
-    const drop = document.getElementById("dropzone");
-    const fileInput = document.getElementById("fileInput");
-    const selectBtn = document.getElementById("selectBtn");
-    const cameraBtn = document.getElementById("cameraBtn");
-    const clearBtn  = document.getElementById("clearBtn");
-    const countBadge = document.getElementById("countBadge");
-    const resultBody = document.getElementById("resultBody");
-    const logEl = document.getElementById("log");
-    const saveTxtBtn = document.getElementById("saveTxtBtn");
-    const saveCsvBtn = document.getElementById("saveCsvBtn");
+      // 2) 言語復元
+      const ssLang = sessionStorage.getItem(LAST_LANG_SS);
+      if(ssLang){ localStorage.setItem(UI_LANG_KEY, ssLang); }
+      const urlLang = getLangFromURL(); if(urlLang){ localStorage.setItem(UI_LANG_KEY, urlLang); }
 
-    document.querySelectorAll(".lang button").forEach(b=>{
-      b.addEventListener("click", ()=>{ setLang(b.dataset.lang); });
-    });
+      // 3) i18n適用
+      applyI18n();
 
-    let queue = []; // {name,file}
-    let results = []; // {store,date,total,note}
-    let processing = false;
+      // 4) イベント再バインド
+      document.querySelectorAll(".lang button").forEach(b=>{ b.onclick = ()=> setLang(b.dataset.lang); });
 
-    function log(msg){ logEl.innerHTML = msg; }
+      drop.ondragover =(e)=>{ e.preventDefault(); drop.classList.add("dragover"); };
+      drop.ondragleave=()=> drop.classList.remove("dragover");
+      drop.ondrop     =(e)=>{ e.preventDefault(); drop.classList.remove("dragover"); handleFiles(e.dataTransfer.files); };
+      drop.onclick    =()=> fileInput.click();
 
-    drop.addEventListener("dragover",(e)=>{ e.preventDefault(); drop.classList.add("dragover"); });
-    drop.addEventListener("dragleave",()=> drop.classList.remove("dragover"));
-    drop.addEventListener("drop",(e)=>{ e.preventDefault(); drop.classList.remove("dragover"); handleFiles(e.dataTransfer.files); });
-    drop.addEventListener("click",()=> fileInput.click());
-    selectBtn.addEventListener("click",()=> fileInput.click());
-    fileInput.addEventListener("change",()=> handleFiles(fileInput.files));
+      selectBtn.onclick = ()=> fileInput.click();
+      fileInput.onchange = ()=> handleFiles(fileInput.files);
 
-    clearBtn.addEventListener("click",()=>{
-      queue=[]; results=[]; processing=false;
-      renderTable(); updateCount(); log(I18N[getLang()].resetDone);
-    });
+      clearBtn.onclick = ()=>{
+        queue=[]; results=[]; processing=false; renderTable(); updateCount();
+        log((I18N[getLang()]||I18N.ja).resetDone);
+      };
 
-    // 決済へ遷移する前に現在の言語を保存（戻り後の混在防止）
-    document.getElementById("unlockPaid").addEventListener("click",(e)=>{
-      e.preventDefault();
-      sessionStorage.setItem(LAST_LANG_SS, getLang());
-      window.open(PAYMENT_LINK,"_blank","noopener");
-    });
+      document.getElementById("unlockPaid").onclick = (e)=>{
+        e.preventDefault();
+        sessionStorage.setItem(LAST_LANG_SS, getLang());
+        window.open(PAYMENT_LINK,"_blank","noopener");
+      };
 
-    // カメラ撮影
-    cameraBtn?.addEventListener("click", async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } }, audio: false
-        });
-        const video = document.createElement("video");
-        video.srcObject = stream; await video.play();
-        const canvas = document.createElement("canvas");
-        canvas.width = video.videoWidth || 1280;
-        canvas.height = video.videoHeight || 720;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        stream.getTracks().forEach(t => t.stop());
-        const blob = await new Promise(res => canvas.toBlob(res, "image/jpeg", 0.9));
-        const file = new File([blob], `camera_${Date.now()}.jpg`, { type: "image/jpeg" });
-        queue.push({ name: file.name, file });
-        updateCount(); processQueue();
-      } catch (e) {
-        alert(getLang()==="en" ? "Could not access camera. Please pick a photo from library." : "カメラを起動できませんでした。写真から選択してください。");
-      }
-    });
+      cameraBtn.onclick = async ()=>{
+        try{
+          const stream = await navigator.mediaDevices.getUserMedia({ video:{facingMode:{ideal:"environment"}}, audio:false });
+          const video=document.createElement("video"); video.srcObject=stream; await video.play();
+          const canvas=document.createElement("canvas");
+          canvas.width=video.videoWidth||1280; canvas.height=video.videoHeight||720;
+          canvas.getContext("2d").drawImage(video,0,0,canvas.width,canvas.height);
+          stream.getTracks().forEach(t=>t.stop());
+          const blob = await new Promise(res=>canvas.toBlob(res,"image/jpeg",0.9));
+          const file = new File([blob], `camera_${Date.now()}.jpg`, { type:"image/jpeg" });
+          queue.push({ name:file.name, file }); updateCount(); processQueue();
+        }catch(e){
+          alert(getLang()==="en" ? "Could not access camera. Please pick a photo from library." : "カメラを起動できませんでした。写真から選択してください。");
+        }
+      };
 
-    function updateCount(){
-      const L=I18N[getLang()];
-      countBadge.textContent = `${queue.length}${getLang()==="ja"?L.countUnit:""}`;
+      document.getElementById("tryFree").onclick = ()=> drop.scrollIntoView({behavior:"smooth",block:"center"});
+
+      saveTxtBtn.onclick = ()=>{
+        if(!guardPaid()) return;
+        const lines=results.map(r=>`Store: ${r.store}\nDate: ${r.date}\nTotal: ${r.total}\nNote: ${r.note||""}\n---`).join("\n");
+        download("receipts.txt", lines);
+      };
+      saveCsvBtn.onclick = ()=>{
+        if(!guardPaid()) return;
+        const header=["store","date","total","note"].join(",");
+        const rows=results.map(r=>[csvEsc(r.store),csvEsc(r.date),csvEsc(r.total),csvEsc(r.note||"")].join(","));
+        download("receipts.csv",[header,...rows].join("\n"));
+      };
+
+      updateCount();
+      saveTxtBtn.disabled = !isPaidSession();
+      saveCsvBtn.disabled = !isPaidSession();
+      log("");
     }
+    document.addEventListener("DOMContentLoaded", bootstrap);
 
+    // ======== Files ========
+    function updateCount(){ const L=I18N[getLang()]; countBadge.textContent = `${queue.length}${getLang()==="ja"?L.countUnit:""}`; }
     function handleFiles(fileList){
       const arr = Array.from(fileList||[]);
       for(const f of arr){ if(/\.(pdf|png|jpg|jpeg)$/i.test(f.name)) queue.push({name:f.name,file:f}); }
@@ -383,15 +377,9 @@ const TESSERACT_OPTS = {
 
     // ======== OCR Core ========
     async function ensureOCR(imageOrDataUrl){
-      // Tesseract.recognizeにworker/core/langパスを明示
-      const { data } = await Tesseract.recognize(
-        imageOrDataUrl,
-        "jpn+eng",
-        TESSERACT_OPTS
-      );
+      const { data } = await Tesseract.recognize(imageOrDataUrl, "jpn+eng", TESSERACT_OPTS);
       return data.text || "";
     }
-
     async function processQueue(){
       if(processing) return;
       if(queue.length===0){ log(""); return; }
@@ -399,45 +387,30 @@ const TESSERACT_OPTS = {
       const L=I18N[getLang()];
       const paid = isPaidSession(); let processed=0; const allowed = paid?Infinity:FREE_CAP;
       log(L.start);
-
       try{
         while(queue.length>0){
-          if(processed>=allowed){
-            log(`<span class="warn">${L.freeCapWarn(FREE_CAP)}</span>`);
-            break;
-          }
-          const item = queue.shift(); // 取り出し
-          processed++;
-
+          if(processed>=allowed){ log(`<span class="warn">${L.freeCapWarn(FREE_CAP)}</span>`); break; }
+          const item = queue.shift(); processed++;
           const text = await readAsTextViaOCR(item.file);
           const parsed = parseReceipt(text, item.name);
-          results.push(parsed);
-          renderTable();
-          await new Promise(r=>setTimeout(r, 60)); // UI更新隙間
+          results.push(parsed); renderTable(); await new Promise(r=>setTimeout(r,60));
         }
         if(processed>0) log(`<span class="ok">${L.done(processed, paid)}</span>`);
-      } catch(err){
-        console.error(err);
-        log(`<span class="err">${I18N[getLang()].err}${String(err && err.message || err)}</span>`);
-      } finally{
-        processing = false;
-        document.getElementById("saveTxtBtn").disabled = !isPaidSession();
-        document.getElementById("saveCsvBtn").disabled = !isPaidSession();
+      }catch(err){
+        console.error(err); log(`<span class="err">${(I18N[getLang()]||I18N.ja).err}${String(err && err.message || err)}</span>`);
+      }finally{
+        processing=false;
+        saveTxtBtn.disabled = !isPaidSession();
+        saveCsvBtn.disabled = !isPaidSession();
       }
     }
-
     async function readAsTextViaOCR(file){
       if(/\.pdf$/i.test(file.name)) return await ocrPdf(file);
       return await ocrImage(file);
     }
     async function ocrImage(file){
       const url = URL.createObjectURL(file);
-      try{
-        const txt = await ensureOCR(url);
-        return txt;
-      } finally{
-        URL.revokeObjectURL(url);
-      }
+      try{ return await ensureOCR(url); } finally{ URL.revokeObjectURL(url); }
     }
     async function ocrPdf(file){
       const buf = await file.arrayBuffer();
@@ -451,9 +424,8 @@ const TESSERACT_OPTS = {
         canvas.width=v.width; canvas.height=v.height;
         await page.render({canvasContext:ctx,viewport:v}).promise;
         const dataUrl=canvas.toDataURL("image/png");
-        const txt = await ensureOCR(dataUrl);
-        fullText += "\n" + txt;
-        await new Promise(r=>setTimeout(r,30)); // 連続処理の負荷を少し緩和
+        fullText += "\n" + await ensureOCR(dataUrl);
+        await new Promise(r=>setTimeout(r,30));
       }
       return fullText;
     }
@@ -462,10 +434,8 @@ const TESSERACT_OPTS = {
     function parseReceipt(text, filename=""){
       const raw=(text||"").replace(/\r/g,"").trim();
       const lines=raw.split("\n").map(s=>s.trim()).filter(Boolean);
-
       const date = pickDate(raw);
       let total = pickTotal(lines, raw);
-
       let store = "";
       for(let i=0;i<Math.min(lines.length,8);i++){
         const s=lines[i]; if(!s) continue;
@@ -477,15 +447,11 @@ const TESSERACT_OPTS = {
       if(!store && filename) store = filename.replace(/\.(pdf|png|jpe?g)$/i,"");
       return { store, date, total, note:"" };
     }
-
     function pickDate(R){
-      // 1) YYYY/MM/DD, YYYY-MM-DD, YYYY年M月D日
       let m = R.match(/(20\d{2})[\/\-.年]\s*(\d{1,2})[\/\-.月]\s*(\d{1,2})\s*日?/);
       if(m) return `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`;
-      // 2) MM/DD/YYYY or DD/MM/YYYY → 英語圏優先でMM/DDと解釈
       m = R.match(/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](20\d{2})\b/);
       if(m){ const mm=String(m[1]).padStart(2,'0'); const dd=String(m[2]).padStart(2,'0'); return `${m[3]}-${mm}-${dd}`; }
-      // 3) Month DD, YYYY / DD Month YYYY
       const months="Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December";
       m = R.match(new RegExp(`\\b(${months})\\s+(\\d{1,2}),?\\s*(20\\d{2})\\b`,'i'));
       if(m) return normDateFromEnglish(m[1],m[2],m[3]);
@@ -499,7 +465,6 @@ const TESSERACT_OPTS = {
       const mm=String(map[monStr.toLowerCase()]||"").padStart(2,'0'); const dd=String(dayStr).padStart(2,'0');
       return `${yearStr}-${mm}-${dd}`;
     }
-
     function pickTotal(lines, raw){
       const keys=/(合計|小計|税込|合\ *計|TOTAL|Total|Amount Due|Amount|Grand Total|Balance)/i;
       for(const line of lines){
@@ -539,8 +504,8 @@ const TESSERACT_OPTS = {
       resultBody.querySelectorAll("input").forEach(inp=>{
         inp.addEventListener("input",(e)=>{ const i=+e.target.dataset.idx; const k=e.target.dataset.key; results[i][k]=e.target.value; });
       });
-      document.getElementById("saveTxtBtn").disabled=!isPaidSession();
-      document.getElementById("saveCsvBtn").disabled=!isPaidSession();
+      saveTxtBtn.disabled=!isPaidSession();
+      saveCsvBtn.disabled=!isPaidSession();
       text("accessState", isPaidSession()?L.statePro:L.stateGuest);
       text("sessionBadge", "session: " + (isPaidSession()?"pro":"guest"));
       text("countBadge", `${queue.length}${getLang()==="ja"?L.countUnit:""}`);
@@ -553,32 +518,12 @@ const TESSERACT_OPTS = {
       if(results.length===0){ alert(L.alertNoData); return false; }
       return true;
     }
-    document.getElementById("saveTxtBtn").addEventListener("click",()=>{
-      if(!guardPaid()) return;
-      const lines=results.map(r=>`Store: ${r.store}\nDate: ${r.date}\nTotal: ${r.total}\nNote: ${r.note||""}\n---`).join("\n");
-      download("receipts.txt", lines);
-    });
-    document.getElementById("saveCsvBtn").addEventListener("click",()=>{
-      if(!guardPaid()) return;
-      const header=["store","date","total","note"].join(",");
-      const rows=results.map(r=>[csvEsc(r.store),csvEsc(r.date),csvEsc(r.total),csvEsc(r.note||"")].join(","));
-      download("receipts.csv",[header,...rows].join("\n"));
-    });
     function csvEsc(s=""){ return /[",\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s; }
     function download(name, content){
       const blob=new Blob([content],{type:"text/plain;charset=utf-8"});
       const url=URL.createObjectURL(blob); const a=document.createElement("a");
       a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url);
     }
-
-    // ======== Boot ========
-    (function boot(){
-      // リダイレクトで戻った直後、セッションストレージに残っていれば優先適用
-      const ssLang = sessionStorage.getItem(LAST_LANG_SS);
-      if(ssLang){ localStorage.setItem(UI_LANG_KEY, ssLang); }
-      const urlLang=getLangFromURL(); if(urlLang) localStorage.setItem(UI_LANG_KEY,urlLang);
-      applyI18n();
-    })();
   </script>
 </body>
 </html>
