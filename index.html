@@ -7,7 +7,37 @@
   <meta name="description" content="領収書をアップロードするだけ。日付・店名・金額を自動整理。TXT/CSV保存は課金後に解放。完全ブラウザ内処理。" />
 
   <style>
-    /* …（スタイルは前回のまま）… */
+    :root { --bg:#0b0c10; --card:#11141a; --muted:#9399a1; --fg:#e6e8ea; --acc:#6ee7b7; }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji"}
+    a{color:var(--acc);text-decoration:none} a:hover{text-decoration:underline}
+    .wrap{max-width:980px;margin:32px auto;padding:0 16px}
+    .hero{background:linear-gradient(180deg,rgba(110,231,183,.08),transparent);border:1px solid #1f2937;padding:24px;border-radius:16px;position:relative}
+    .hero h1{margin:0 0 8px;font-size:28px}
+    .sub{color:var(--muted);margin:0 0 16px}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    .btn{background:#1f2937;color:#e5e7eb;border:1px solid #374151;border-radius:10px;padding:10px 14px;cursor:pointer}
+    .btn[disabled]{opacity:.5;cursor:not-allowed}
+    .btn.acc{background:#047857;border-color:#065f46}
+    .pill{display:inline-flex;align-items:center;gap:8px;border:1px solid #374151;background:#111827;padding:6px 10px;border-radius:999px;color:#e5e7eb}
+    .lang{position:absolute;right:16px;top:16px;display:flex;gap:8px}
+    .lang button{font-size:12px;padding:6px 10px;border-radius:999px}
+    .grid{display:grid;gap:16px}
+    .card{background:var(--card);border:1px solid #1f2937;border-radius:16px;padding:16px}
+    .muted{color:var(--muted)}
+    .drop{border:1.5px dashed #334155;border-radius:12px;padding:18px;text-align:center;background:#0f1623;flex:1;min-width:260px}
+    .drop.dragover{outline:2px solid #2563eb;outline-offset:2px}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:10px;border-bottom:1px solid #1f2937;vertical-align:top}
+    th{color:#cbd5e1;text-align:left}
+    input[type="text"]{width:100%;background:#0b1220;border:1px solid #1f2937;border-radius:8px;color:#e5e7eb;padding:8px}
+    .kbd{border:1px solid #334155;background:#0b1220;color:#e5e7eb;padding:2px 6px;border-radius:6px}
+    .right{display:flex;justify-content:flex-end;gap:8px}
+    .small{font-size:12px}
+    .badge{display:inline-block;background:#0b1220;border:1px solid #1f2937;border-radius:8px;padding:2px 8px;color:#cbd5e1}
+    .mono{font-family: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
+    .footer{color:#94a3b8;font-size:13px;margin:32px 0}
+    .warn{color:#fbbf24} .err{color:#f87171} .ok{color:#34d399}
   </style>
 
   <!-- OCR / PDF libs -->
@@ -18,7 +48,8 @@
   </script>
 </head>
 <body>
-  <!-- …（HTML本体は前回のまま）… -->
+  <!-- HEROなどHTML本体は省略せずこのまま前回の構成で -->
+  <!-- （ここはあなたの現行index.htmlのまま置き換え） -->
 
 <script>
 /* ===== 前回までの変数・I18N定義・UI関数・OCR処理等は全て同じ ===== */
