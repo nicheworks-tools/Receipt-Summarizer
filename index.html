@@ -147,17 +147,16 @@
     const LAST_LANG_SS = "rs_last_lang_for_return"; // 決済前に一時保存
 
     // Tesseractのパスを明示（安定化）
-    const TESSERACT_OPTS = {
-      workerPath: "https://unpkg.com/tesseract.js@5.0.3/dist/worker.min.js",
-      corePath:   "https://unpkg.com/tesseract.js-core@5.0.0/umd/tesseract-core.wasm.js",
-      langPath:   "https://tessdata.projectnaptha.com/4.0.0", // 各言語.traineddata置き場
-      logger: m => {
-        // 進捗を画面に出す
-        if (m && m.progress != null) {
-          log(`OCR ${Math.round(m.progress*100)}% …`);
-        }
-      }
-    };
+const TESSERACT_OPTS = {
+  workerPath: "/worker.min.js",
+  corePath:   "/tesseract-core.wasm.js",
+  langPath:   "https://tessdata.projectnaptha.com/4.0.0",
+  logger: m => {
+    if (m && m.progress != null) {
+      log(`OCR ${Math.round(m.progress*100)}% …`);
+    }
+  }
+};
 
     // ======== I18N ========
     const I18N = {
