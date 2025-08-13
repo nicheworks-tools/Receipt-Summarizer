@@ -48,13 +48,65 @@
   </script>
 </head>
 <body>
-  <!-- HEROなどHTML本体は省略せずこのまま前回の構成で -->
-  <!-- （ここはあなたの現行index.htmlのまま置き換え） -->
+  <div class="wrap">
+    <section class="hero">
+      <div class="lang">
+        <button class="btn" data-lang="ja">日本語</button>
+        <button class="btn" data-lang="en">English</button>
+      </div>
+      <h1 id="t-title">Receipt Summarizer（領収書チェッカー）</h1>
+      <p class="sub" id="t-sub">領収書をアップロードするだけ。<b>日付・店名・金額</b>を自動整理。</p>
+      <div class="row">
+        <button id="tryFree" class="btn acc">無料で試す（2枚まで）</button>
+        <a id="unlockPaid" class="btn" href="#" rel="noopener">一括保存を解放（200円）</a>
+        <span class="pill"><span id="accessState">未購入</span> <span class="badge" id="sessionBadge">session: guest</span></span>
+      </div>
+    </section>
+
+    <section class="grid" style="margin-top:20px">
+      <div class="card">
+        <div class="row">
+          <div class="drop" id="dropzone">
+            <b id="t-drop-1">ここにドラッグ＆ドロップ</b><br/>
+            <span id="t-drop-2">または</span> <span class="kbd" id="t-drop-3">ファイルを選択</span>
+            <div class="small muted" style="margin-top:8px" id="t-drop-4">対応：JPG / PNG / PDF</div>
+            <input id="fileInput" type="file" accept=".jpg,.jpeg,.png,.pdf,image/*,application/pdf" multiple style="display:none" />
+          </div>
+          <div class="card" style="flex:1; min-width:260px">
+            <div class="row">
+              <button class="btn" id="selectBtn">ファイル選択</button>
+              <button class="btn" id="cameraBtn">カメラで撮影</button>
+              <button class="btn" id="clearBtn">リセット</button>
+              <span class="badge" id="countBadge">0件</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin:0" id="t-results">抽出結果</h3>
+        <div style="overflow:auto">
+          <table id="resultTable">
+            <thead>
+              <tr>
+                <th id="th-store" style="width:30%">店名</th>
+                <th id="th-date"  style="width:20%">日付</th>
+                <th id="th-total" style="width:20%">合計金額</th>
+                <th id="th-note">メモ</th>
+              </tr>
+            </thead>
+            <tbody id="resultBody"></tbody>
+          </table>
+        </div>
+        <div id="log" class="small muted" style="margin-top:12px"></div>
+      </div>
+    </section>
+  </div>
 
 <script>
-/* ===== 前回までの変数・I18N定義・UI関数・OCR処理等は全て同じ ===== */
+/* ここに I18N や OCR 関数などの既存ロジックを入れる */
+/* 以下は金額抽出強化版の関数群 */
 
-/* ======== Parsing (JA/EN) ======== */
 function parseReceipt(text, filename=""){
   const raw=(text||"").replace(/\r/g,"").trim();
   const lines=raw.split("\n").map(s=>s.trim()).filter(Boolean);
@@ -74,7 +126,6 @@ function parseReceipt(text, filename=""){
   return { store, date, total, note:"" };
 }
 
-/* ======== 金額抽出強化版 ======== */
 function pickTotal(lines, raw) {
   const isNoAmountLine = (s) =>
     /(TEL|電話|FAX|〒|郵便|住所|http|https)/i.test(s) ||
@@ -172,6 +223,17 @@ function sumCurrency(a, b) {
     return normalizeAmountCurrency(curA + String(va + vb));
   }
   return "";
+}
+
+function normalizeAmountCurrency(s){
+  const hasUSD = /USD|\$/i.test(s);
+  const hasJPY = /(円|¥|￥)/.test(s);
+  const currency = hasUSD ? "$" : (hasJPY ? "¥" : "");
+  const num = (s||"").replace(/[^0-9.]/g,"");
+  if (!num) return "";
+  const [int, dec] = num.split(".");
+  const intFmt = int.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return currency + intFmt + (dec ? "." + dec : "");
 }
 </script>
 </body>
