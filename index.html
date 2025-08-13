@@ -14,7 +14,7 @@
     .wrap{max-width:980px;margin:32px auto;padding:0 16px}
     .hero{background:linear-gradient(180deg,rgba(110,231,183,.08),transparent);border:1px solid #1f2937;padding:24px;border-radius:16px;position:relative}
     .hero h1{margin:0 0 8px;font-size:28px}
-    .sub{color:var(--muted);margin: 0 0 16px}
+    .sub{color:var(--muted);margin:0 0 16px}
     .row{display:flex;gap:12px;flex-wrap:wrap}
     .btn{background:#1f2937;color:#e5e7eb;border:1px solid #374151;border-radius:10px;padding:10px 14px;cursor:pointer}
     .btn[disabled]{opacity:.5;cursor:not-allowed}
@@ -37,13 +37,16 @@
     .badge{display:inline-block;background:#0b1220;border:1px solid #1f2937;border-radius:8px;padding:2px 8px;color:#cbd5e1}
     .mono{font-family: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
     .footer{color:#94a3b8;font-size:13px;margin:32px 0}
+    .warn{color:#fbbf24} .err{color:#f87171} .ok{color:#34d399}
   </style>
 
-  <!-- OCR -->
+  <!-- OCR / PDF libs -->
   <script src="https://unpkg.com/tesseract.js@5.0.3/dist/tesseract.min.js"></script>
-  <!-- PDF.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.3.136/pdf.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script>window.pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.3.136/pdf.worker.min.js";</script>
+  <script>
+    // PDF.js worker
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.3.136/pdf.worker.min.js";
+  </script>
 </head>
 <body>
   <div class="wrap">
@@ -133,15 +136,29 @@
   </div>
 
   <script>
-    // ========= Config =========
-    const PAYMENT_LINK = "https://buy.stripe.com/test_9B6aEZgIgfMEbcKgYK2Ry02"; // ← Stripe Payment Link
+    // ======== Config ========
+    const PAYMENT_LINK = "YOUR_PAYMENT_LINK_URL"; // ← Stripe Payment Link（テスト/本番を差し替え）
     const FREE_CAP = 2;
     const PAID_HOURS = 24;
     const PAID_KEY = "rs_paid_session";
     const PAID_EXP  = "rs_paid_expires";
-    const UI_LANG_KEY = "rs_ui_lang"; // 'ja' | 'en'
+    const UI_LANG_KEY = "rs_ui_lang";
+    const LAST_LANG_SS = "rs_last_lang_for_return"; // 決済前に一時保存
 
-    // ========= I18N =========
+    // Tesseractのパスを明示（安定化）
+    const TESSERACT_OPTS = {
+      workerPath: "https://unpkg.com/tesseract.js@5.0.3/dist/worker.min.js",
+      corePath:   "https://unpkg.com/tesseract.js-core@5.0.0/umd/tesseract-core.wasm.js",
+      langPath:   "https://tessdata.projectnaptha.com/4.0.0", // 各言語.traineddata置き場
+      logger: m => {
+        // 進捗を画面に出す
+        if (m && m.progress != null) {
+          log(`OCR ${Math.round(m.progress*100)}% …`);
+        }
+      }
+    };
+
+    // ======== I18N ========
     const I18N = {
       ja: {
         title:"Receipt Summarizer（領収書チェッカー）",
@@ -178,6 +195,7 @@
         choose:"ファイル選択",
         camera:"カメラで撮影",
         reset:"リセット",
+        err:"エラー：",
       },
       en: {
         title:"Receipt Summarizer",
@@ -214,11 +232,13 @@
         choose:"Choose files",
         camera:"Use camera",
         reset:"Reset",
+        err:"Error: ",
       }
     };
 
+    // ======== Lang helpers ========
     function getLangFromURL(){ const p = new URLSearchParams(location.search).get("lang"); return (p==="en"||p==="ja")?p:null; }
-    function getLang(){ return getLangFromURL() || localStorage.getItem(UI_LANG_KEY) || "ja"; }
+    function getLang(){ return getLangFromURL() || localStorage.getItem(UI_LANG_KEY) || sessionStorage.getItem(LAST_LANG_SS) || "ja"; }
     function setLang(l){ localStorage.setItem(UI_LANG_KEY,l); applyI18n(); }
 
     function applyI18n(){
@@ -261,14 +281,16 @@
     function text(id, s){ const el=document.getElementById(id); if(el) el.textContent=s; }
     function html(id, s){ const el=document.getElementById(id); if(el) el.innerHTML=s; }
 
-    // ========= Pay session =========
+    // ======== Pay session ========
     function nowTs(){ return Date.now(); }
     function setPaidSession(){
       localStorage.setItem(PAID_KEY,"true");
       localStorage.setItem(PAID_EXP, String(nowTs()+PAID_HOURS*60*60*1000));
-      applyI18n();
+      // 強制UI更新
       document.getElementById("saveTxtBtn").disabled=false;
       document.getElementById("saveCsvBtn").disabled=false;
+      applyI18n();
+      log(`<span class="ok">Pro unlocked.</span>`);
     }
     function isPaidSession(){
       const flag = localStorage.getItem(PAID_KEY)==="true";
@@ -278,13 +300,13 @@
       return true;
     }
 
-    // URL ?pro=1 → 解放
+    // URL ?pro=1 → 解放（言語も復元）
     (function initOnLoad(){
       const params = new URLSearchParams(location.search);
       if(params.get("pro")==="1"){ setPaidSession(); }
     })();
 
-    // ========= Elements / Events =========
+    // ======== Elements / Events ========
     const drop = document.getElementById("dropzone");
     const fileInput = document.getElementById("fileInput");
     const selectBtn = document.getElementById("selectBtn");
@@ -302,6 +324,7 @@
 
     let queue = []; // {name,file}
     let results = []; // {store,date,total,note}
+    let processing = false;
 
     function log(msg){ logEl.innerHTML = msg; }
 
@@ -312,12 +335,19 @@
     selectBtn.addEventListener("click",()=> fileInput.click());
     fileInput.addEventListener("change",()=> handleFiles(fileInput.files));
 
-    clearBtn.addEventListener("click",()=>{ queue=[]; results=[]; renderTable(); updateCount(); log(I18N[getLang()].resetDone); });
+    clearBtn.addEventListener("click",()=>{
+      queue=[]; results=[]; processing=false;
+      renderTable(); updateCount(); log(I18N[getLang()].resetDone);
+    });
 
-    document.getElementById("tryFree").addEventListener("click",()=> drop.scrollIntoView({behavior:"smooth",block:"center"}));
-    document.getElementById("unlockPaid").addEventListener("click",(e)=>{ e.preventDefault(); window.open(PAYMENT_LINK,"_blank","noopener"); });
+    // 決済へ遷移する前に現在の言語を保存（戻り後の混在防止）
+    document.getElementById("unlockPaid").addEventListener("click",(e)=>{
+      e.preventDefault();
+      sessionStorage.setItem(LAST_LANG_SS, getLang());
+      window.open(PAYMENT_LINK,"_blank","noopener");
+    });
 
-    // ------ その場で撮影（4-2） ------
+    // カメラ撮影
     cameraBtn?.addEventListener("click", async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -325,21 +355,16 @@
         });
         const video = document.createElement("video");
         video.srcObject = stream; await video.play();
-
         const canvas = document.createElement("canvas");
         canvas.width = video.videoWidth || 1280;
         canvas.height = video.videoHeight || 720;
         const ctx = canvas.getContext("2d");
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
         stream.getTracks().forEach(t => t.stop());
-
         const blob = await new Promise(res => canvas.toBlob(res, "image/jpeg", 0.9));
         const file = new File([blob], `camera_${Date.now()}.jpg`, { type: "image/jpeg" });
-
         queue.push({ name: file.name, file });
-        updateCount();
-        processQueue();
+        updateCount(); processQueue();
       } catch (e) {
         alert(getLang()==="en" ? "Could not access camera. Please pick a photo from library." : "カメラを起動できませんでした。写真から選択してください。");
       }
@@ -356,23 +381,49 @@
       updateCount(); processQueue();
     }
 
-    // ========= OCR Core =========
+    // ======== OCR Core ========
+    async function ensureOCR(imageOrDataUrl){
+      // Tesseract.recognizeにworker/core/langパスを明示
+      const { data } = await Tesseract.recognize(
+        imageOrDataUrl,
+        "jpn+eng",
+        TESSERACT_OPTS
+      );
+      return data.text || "";
+    }
+
     async function processQueue(){
+      if(processing) return;
       if(queue.length===0){ log(""); return; }
+      processing = true;
       const L=I18N[getLang()];
       const paid = isPaidSession(); let processed=0; const allowed = paid?Infinity:FREE_CAP;
       log(L.start);
-      for(const item of queue){
-        if(processed>=allowed){ log(`<span>${L.freeCapWarn(FREE_CAP)}</span>`); break; }
-        processed++;
-        const text = await readAsTextViaOCR(item.file);
-        const parsed = parseReceipt(text, item.name);
-        results.push(parsed);
-        renderTable();
+
+      try{
+        while(queue.length>0){
+          if(processed>=allowed){
+            log(`<span class="warn">${L.freeCapWarn(FREE_CAP)}</span>`);
+            break;
+          }
+          const item = queue.shift(); // 取り出し
+          processed++;
+
+          const text = await readAsTextViaOCR(item.file);
+          const parsed = parseReceipt(text, item.name);
+          results.push(parsed);
+          renderTable();
+          await new Promise(r=>setTimeout(r, 60)); // UI更新隙間
+        }
+        if(processed>0) log(`<span class="ok">${L.done(processed, paid)}</span>`);
+      } catch(err){
+        console.error(err);
+        log(`<span class="err">${I18N[getLang()].err}${String(err && err.message || err)}</span>`);
+      } finally{
+        processing = false;
+        document.getElementById("saveTxtBtn").disabled = !isPaidSession();
+        document.getElementById("saveCsvBtn").disabled = !isPaidSession();
       }
-      if(processed>0) log(L.done(processed, paid));
-      document.getElementById("saveTxtBtn").disabled = !isPaidSession();
-      document.getElementById("saveCsvBtn").disabled = !isPaidSession();
     }
 
     async function readAsTextViaOCR(file){
@@ -381,26 +432,33 @@
     }
     async function ocrImage(file){
       const url = URL.createObjectURL(file);
-      const { data } = await Tesseract.recognize(url, "jpn+eng");
-      URL.revokeObjectURL(url);
-      return data.text || "";
+      try{
+        const txt = await ensureOCR(url);
+        return txt;
+      } finally{
+        URL.revokeObjectURL(url);
+      }
     }
     async function ocrPdf(file){
       const buf = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({data:buf}).promise;
-      let fullText=""; for(let p=1;p<=pdf.numPages;p++){
-        const page=await pdf.getPage(p); const v=page.getViewport({scale:2.0});
-        const canvas=document.createElement("canvas"); const ctx=canvas.getContext("2d");
+      let fullText="";
+      for(let p=1;p<=pdf.numPages;p++){
+        const page=await pdf.getPage(p);
+        const v=page.getViewport({scale:2.0});
+        const canvas=document.createElement("canvas");
+        const ctx=canvas.getContext("2d");
         canvas.width=v.width; canvas.height=v.height;
         await page.render({canvasContext:ctx,viewport:v}).promise;
         const dataUrl=canvas.toDataURL("image/png");
-        const { data } = await Tesseract.recognize(dataUrl, "jpn+eng");
-        fullText += "\n" + (data.text||"");
+        const txt = await ensureOCR(dataUrl);
+        fullText += "\n" + txt;
+        await new Promise(r=>setTimeout(r,30)); // 連続処理の負荷を少し緩和
       }
       return fullText;
     }
 
-    // ========= Parsing (JA/EN) =========
+    // ======== Parsing (JA/EN) ========
     function parseReceipt(text, filename=""){
       const raw=(text||"").replace(/\r/g,"").trim();
       const lines=raw.split("\n").map(s=>s.trim()).filter(Boolean);
@@ -465,7 +523,7 @@
       return currency + intFmt + (dec?("." + dec):"");
     }
 
-    // ========= Render / Save =========
+    // ======== Render / Save ========
     function renderTable(){
       const L=I18N[getLang()];
       resultBody.innerHTML="";
@@ -495,12 +553,12 @@
       if(results.length===0){ alert(L.alertNoData); return false; }
       return true;
     }
-    saveTxtBtn.addEventListener("click",()=>{
+    document.getElementById("saveTxtBtn").addEventListener("click",()=>{
       if(!guardPaid()) return;
       const lines=results.map(r=>`Store: ${r.store}\nDate: ${r.date}\nTotal: ${r.total}\nNote: ${r.note||""}\n---`).join("\n");
       download("receipts.txt", lines);
     });
-    saveCsvBtn.addEventListener("click",()=>{
+    document.getElementById("saveCsvBtn").addEventListener("click",()=>{
       if(!guardPaid()) return;
       const header=["store","date","total","note"].join(",");
       const rows=results.map(r=>[csvEsc(r.store),csvEsc(r.date),csvEsc(r.total),csvEsc(r.note||"")].join(","));
@@ -513,8 +571,11 @@
       a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url);
     }
 
-    // ========= Boot =========
+    // ======== Boot ========
     (function boot(){
+      // リダイレクトで戻った直後、セッションストレージに残っていれば優先適用
+      const ssLang = sessionStorage.getItem(LAST_LANG_SS);
+      if(ssLang){ localStorage.setItem(UI_LANG_KEY, ssLang); }
       const urlLang=getLangFromURL(); if(urlLang) localStorage.setItem(UI_LANG_KEY,urlLang);
       applyI18n();
     })();
