@@ -136,7 +136,7 @@
   </div>
 
   <script>
-    // ======== Config ========
+    /* ================= Config ================= */
     const PAYMENT_LINK = "https://buy.stripe.com/test_9B6aEZgIgfMEbcKgYK2Ry02";
     const FREE_CAP = 2;
     const PAID_HOURS = 24;
@@ -157,19 +157,16 @@
       tessedit_char_whitelist: "0123456789$¥￥.,:/-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz() "
     };
 
-    // ======== I18N ========
+    /* ================= I18N ================= */
     const I18N = {
-      ja: {
-        title:"Receipt Summarizer（領収書チェッカー）",
+      ja: { title:"Receipt Summarizer（領収書チェッカー）",
         sub:"領収書をアップロードするだけ。<b>日付・店名・金額</b>を自動整理。経費計上や確定申告の下ごしらえを数分で。",
-        tryFree:"無料で試す（2枚まで）",
-        unlock:"一括保存を解放（200円）",
+        tryFree:"無料で試す（2枚まで）", unlock:"一括保存を解放（200円）",
         stateGuest:"未購入", statePro:"解放中（購入済）",
         note:"※ 決済はStripeのワンタイム決済です。決済後にこのページへ戻ると当日セッションが解放されます。",
         drop1:"ここにドラッグ＆ドロップ", drop2:"または", drop3:"ファイルを選択", drop4:"対応：JPG / PNG / PDF",
         hint:"無料は<strong>2枚</strong>まで解析可能。購入済み/解放中はセッション内で10〜無制限（端末性能に依存）。",
-        results:"抽出結果",
-        saveTxt:"TXTで保存（課金後）", saveCsv:"CSVで保存（課金後）",
+        results:"抽出結果", saveTxt:"TXTで保存（課金後）", saveCsv:"CSVで保存（課金後）",
         edit:"必要なら編集してから保存してください。",
         thStore:"店名", thDate:"日付", thTotal:"合計金額", thNote:"メモ / カテゴリ",
         privacy:"プライバシー",
@@ -179,25 +176,21 @@
         faq:"よくある質問",
         q1:"<b>Q.</b> 暗い/斜めの画像でも読めますか？ <br><b>A.</b> ある程度補正しますが、精度は元データ品質に依存します。",
         q2:"<b>Q.</b> 何枚まで処理できますか？ <br><b>A.</b> 無料は2枚まで。購入/解放後は10〜無制限（環境により制限される場合あり）。",
-        countUnit:"件",
-        resetDone:"リセットしました。", start:"OCR開始：順次処理します…",
+        countUnit:"件", resetDone:"リセットしました。", start:"OCR開始：順次処理します…",
         freeCapWarn:(cap)=>`無料枠は ${cap} 枚までです。課金後、リロードなしで続きが処理できます。`,
         done:(n,paid)=>`処理完了：${n}件（${paid?"解放中":"無料枠内"}）`,
         alertNeedPay:"保存は課金後に解放されます。「一括保存を解放（200円）」から決済してください。",
         alertNoData:"保存対象がありません。先に領収書を解析してください。",
         choose:"ファイル選択", camera:"カメラで撮影", reset:"リセット", err:"エラー：",
       },
-      en: {
-        title:"Receipt Summarizer",
+      en: { title:"Receipt Summarizer",
         sub:"Just upload receipts. Automatically extracts <b>Date / Store / Total</b> for quick bookkeeping.",
-        tryFree:"Try free (up to 2)",
-        unlock:"Unlock bulk save (¥200)",
+        tryFree:"Try free (up to 2)", unlock:"Unlock bulk save (¥200)",
         stateGuest:"Locked", statePro:"Unlocked (Pro)",
         note:"Stripe one-time payment. After checkout, return to this page to unlock for today.",
         drop1:"Drag & drop files here", drop2:"or", drop3:"Choose files", drop4:"Supported: JPG / PNG / PDF",
         hint:"Free plan: up to <strong>2</strong> receipts. After unlock: 10 to unlimited per session (device-dependent).",
-        results:"Results",
-        saveTxt:"Save as TXT (after unlock)", saveCsv:"Save as CSV (after unlock)",
+        results:"Results", saveTxt:"Save as TXT (after unlock)", saveCsv:"Save as CSV (after unlock)",
         edit:"Edit values if needed before saving.",
         thStore:"Store", thDate:"Date", thTotal:"Total", thNote:"Note / Category",
         privacy:"Privacy",
@@ -216,7 +209,7 @@
       }
     };
 
-    // ======== Lang helpers ========
+    /* ================= Lang helpers ================= */
     function getLangFromURL(){ const p = new URLSearchParams(location.search).get("lang"); return (p==="en"||p==="ja")?p:null; }
     function getLang(){ return getLangFromURL() || localStorage.getItem(UI_LANG_KEY) || sessionStorage.getItem(LAST_LANG_SS) || "ja"; }
     function setLang(l){ localStorage.setItem(UI_LANG_KEY,l); applyI18n(); }
@@ -241,7 +234,7 @@
     function text(id, s){ const el=document.getElementById(id); if(el) el.textContent=s; }
     function html(id, s){ const el=document.getElementById(id); if(el) el.innerHTML=s; }
 
-    // ======== Pay session ========
+    /* ================= Pay session ================= */
     function nowTs(){ return Date.now(); }
     function setPaidSession(){
       localStorage.setItem(PAID_KEY,"true");
@@ -259,14 +252,14 @@
       return true;
     }
 
-    // ======== Elements / State ========
+    /* ================= Elements / State ================= */
     let drop, fileInput, selectBtn, cameraBtn, clearBtn, countBadge, resultBody, logEl, saveTxtBtn, saveCsvBtn;
     let queue = []; let results = []; let processing = false;
 
     function log(msg){ if(logEl) logEl.innerHTML = msg; }
     window.addEventListener("error",(e)=>{ try{ log(`<span class="err">${(I18N[getLang()]||I18N.ja).err}${e.message||e}</span>`);}catch(_){} });
 
-    // ======== Bootstrap ========
+    /* ================= Bootstrap ================= */
     function bootstrap(){
       drop       = document.getElementById("dropzone");
       fileInput  = document.getElementById("fileInput");
@@ -355,7 +348,7 @@
     }
     document.addEventListener("DOMContentLoaded", bootstrap);
 
-    // ======== Files ========
+    /* ================= Files ================= */
     function updateCount(){ const L=I18N[getLang()]; countBadge.textContent = `${queue.length}${getLang()==="ja"?L.countUnit:""}`; }
     function handleFiles(fileList){
       const arr = Array.from(fileList||[]);
@@ -363,17 +356,15 @@
       updateCount(); processQueue();
     }
 
-    // ======== OCR / PDF smart ========
+    /* ================= OCR / PDF smart ================= */
     async function ensureOCR(imageOrDataUrl){
       const { data } = await Tesseract.recognize(imageOrDataUrl, "jpn+eng", TESSERACT_OPTS);
       return data.text || "";
     }
-
     async function readAsTextViaOCR(file){
       if (/\.pdf$/i.test(file.name)) return await readPdfSmart(file);
       return await ocrImageSmart(file);
     }
-
     // PDF：テキスト直抽出 → だめならレンダ→OCR
     async function readPdfSmart(file){
       const buf = await file.arrayBuffer();
@@ -402,8 +393,7 @@
       }
       return ocrAll;
     }
-
-    // 画像：軽い前処理（グレイスケール＋コントラスト）
+    // 画像：グレイスケール＋コントラスト
     async function ocrImageSmart(file){
       const img = await createImageBitmap(file);
       const scale = Math.min(2000/Math.max(img.width,img.height), 2.5);
@@ -413,7 +403,6 @@
       canvas.width = w; canvas.height = h;
       const ctx = canvas.getContext("2d");
       ctx.drawImage(img, 0, 0, w, h);
-
       const imgData = ctx.getImageData(0,0,w,h);
       const d = imgData.data;
       for (let i=0;i<d.length;i+=4){
@@ -422,12 +411,11 @@
         d[i]=d[i+1]=d[i+2]=c;
       }
       ctx.putImageData(imgData,0,0);
-
       const dataUrl = canvas.toDataURL("image/png");
       return await ensureOCR(dataUrl);
     }
 
-    // ======== Queue Processor ========
+    /* ================= Queue Processor ================= */
     async function processQueue(){
       if(processing) return;
       if(queue.length===0){ log(""); return; }
@@ -463,7 +451,7 @@
       }
     }
 
-    // ======== Parsing (JA/EN) ========
+    /* ================= Parsing (JA/EN) ================= */
     function parseReceipt(text, filename=""){
       const raw=(text||"").replace(/\r/g,"").trim();
       const lines=raw.split("\n").map(s=>s.trim()).filter(Boolean);
@@ -471,34 +459,30 @@
       const date  = pickDate(raw);
       const total = pickTotal(lines, raw);
 
-      // 店名：先頭〜8行から、住所/連絡先/見出しを除く最初の文字行
+      // 店名候補（強化版）
+      const ban = /(〒|郵便|TEL|電話|FAX|URL|http|https|税|合計|小計|ご請求|領収|明細|RECEIPT|INVOICE|SUBTOTAL|TOTAL|AMOUNT|お会計|伝票|番号|No\.?)/i;
+      const orgWords = /(株式会社|有限会社|合同会社|Inc\.?|LLC|Co\.|Company|Cafe|カフェ|ショップ|堂|商店|ストア|店)/i;
+
       let store = "";
-      const ban = /(〒|郵便|TEL|電話|FAX|URL|http|https|税|合計|ご請求|領収|明細|RECEIPT|INVOICE|SUBTOTAL|TOTAL|AMOUNT|小計|お会計)/i;
-      for(let i=0;i<Math.min(lines.length,8);i++){
-        const s=lines[i]; if(!s) continue;
-        if(/[0-9０-９]/.test(s)) continue;
-        if(ban.test(s)) continue;
-        if(s.length<2) continue;
-        store = s.replace(/^[\-\*●\s]+/,"").trim(); if(store) break;
-      }
+      const head = lines.slice(0,15);
+      for(const s of head){ if(!s||ban.test(s)) continue; if(orgWords.test(s)){ store=s.replace(/^[\-\*●\s]+/,"").trim(); break; } }
+      if(!store){ for(const s of head){ if(ban.test(s)) continue; if(/[A-Za-z\u30A0-\u30FF][A-Za-z\u30A0-\u30FF\s.'-]{2,}/.test(s)){ store=s.replace(/^[\-\*●\s]+/,"").trim(); break; } } }
+      if(!store){ for(const s of head){ if(!s||ban.test(s)) continue; if(!/[0-9０-９]/.test(s) && s.length>=2){ store=s.replace(/^[\-\*●\s]+/,"").trim(); break; } } }
       if(!store && filename) store = filename.replace(/\.(pdf|png|jpe?g)$/i,"");
+      if(store === "..." || store.length <= 1) store = "";
+
       return { store, date, total, note:"" };
     }
 
-    // ---- 日付抽出（追加！） ----
+    // 日付抽出
     function pickDate(R){
-      // 1) YYYY/MM/DD, YYYY-MM-DD, YYYY年M月D日
       let m = R.match(/(20\d{2})[\/\-.年]\s*(\d{1,2})[\/\-.月]\s*(\d{1,2})\s*日?/);
       if(m) return `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`;
-      // 2) MM/DD/YYYY or DD/MM/YYYY（英語圏MM/DDと解釈）
       m = R.match(/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](20\d{2})\b/);
       if(m){ const mm=String(m[1]).padStart(2,'0'); const dd=String(m[2]).padStart(2,'0'); return `${m[3]}-${mm}-${dd}`; }
-      // 3) Month DD, YYYY / DD Month YYYY
       const months="Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|January|February|March|April|May|June|July|August|September|October|November|December";
-      m = R.match(new RegExp(`\\b(${months})\\s+(\\d{1,2}),?\\s*(20\\d{2})\\b`,'i'));
-      if(m) return normDateFromEnglish(m[1],m[2],m[3]);
-      m = R.match(new RegExp(`\\b(\\d{1,2})\\s+(${months}),?\\s*(20\\d{2})\\b`,'i'));
-      if(m) return normDateFromEnglish(m[2],m[1],m[3]);
+      m = R.match(new RegExp(`\\b(${months})\\s+(\\d{1,2}),?\\s*(20\\d{2})\\b`,'i')); if(m) return normDateFromEnglish(m[1],m[2],m[3]);
+      m = R.match(new RegExp(`\\b(\\d{1,2})\\s+(${months}),?\\s*(20\\d{2})\\b`,'i')); if(m) return normDateFromEnglish(m[2],m[1],m[3]);
       return "";
     }
     function normDateFromEnglish(monStr, dayStr, yearStr){
@@ -508,24 +492,21 @@
       return `${yearStr}-${mm}-${dd}`;
     }
 
-    // ---- 金額抽出（強化） ----
+    // 金額抽出（強化）
     function pickTotal(lines, raw) {
-      const isNoAmountLine = (s) =>
-        /(TEL|電話|FAX|〒|郵便|住所|http|https)/i.test(s) ||
+      const isNoise = (s) =>
+        /(TEL|電話|FAX|〒|郵便|住所|http|https|番地|丁目|chome|Building|Bldg)/i.test(s) ||
         /\b\d{2,4}-\d{2,4}-\d{3,4}\b/.test(s);
 
       const totalKey = /(合計金額|総合計|合計|ご請求金額|お会計|お支払金額|税込合計|TOTAL|AMOUNT DUE|Grand Total|Balance Due)/i;
+
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
-        if (isNoAmountLine(line)) continue;
-        if (totalKey.test(line.replace(/\s/g, ""))) {
-          const c0 = findAmountStrict(line);
-          if (c0) return c0;
-          if (i + 1 < lines.length && !isNoAmountLine(lines[i + 1])) {
-            const c1 = findAmountStrict(lines[i + 1]); if (c1) return c1;
-          }
-          if (i + 2 < lines.length && !isNoAmountLine(lines[i + 2])) {
-            const c2 = findAmountStrict(lines[i + 2]); if (c2) return c2;
+        if (totalKey.test(line.replace(/\s/g,""))) {
+          for (const cand of [line, lines[i+1], lines[i+2]]) {
+            if(!cand || isNoise(cand)) continue;
+            const a = findAmountStrict(cand);
+            if (a) return a;
           }
         }
       }
@@ -533,13 +514,13 @@
       const subtotalKey = /(小計|SUBTOTAL)/i;
       const taxKey = /(税|消費税|税込|TAX)/i;
       let subtotal = null, tax = null;
-      for (let i = 0; i < lines.length; i++) {
-        const s = lines[i]; if (isNoAmountLine(s)) continue;
+      for (let i=0;i<lines.length;i++){
+        const s = lines[i]; if (isNoise(s)) continue;
         if (subtotal === null && subtotalKey.test(s)) {
-          subtotal = findAmountStrict(s) || (i + 1 < lines.length ? findAmountStrict(lines[i + 1]) : null);
+          subtotal = findAmountStrict(s) || (lines[i+1] && findAmountStrict(lines[i+1]));
         }
         if (tax === null && taxKey.test(s)) {
-          tax = findAmountStrict(s) || (i + 1 < lines.length ? findAmountStrict(lines[i + 1]) : null);
+          tax = findAmountStrict(s) || (lines[i+1] && findAmountStrict(lines[i+1]));
         }
       }
       if (subtotal && tax) {
@@ -547,26 +528,28 @@
         if (sum) return sum;
       }
 
-      // フォールバック：通貨付きを最優先
       const yenOrDollar = [];
       const numericLoose = [];
       for (const s of lines) {
-        if (isNoAmountLine(s)) continue;
+        if (isNoise(s)) continue;
         const amounts = allAmountsInLine(s);
         for (const a of amounts) {
           if (/[円¥￥$]|USD/i.test(a)) yenOrDollar.push(a);
           else numericLoose.push(a);
         }
       }
-      const best = (list) => {
+      const best = (list, allow3digits=false) => {
         let pick = "", max = 0;
         for (const a of list) {
           const v = Number(a.replace(/[^\d.]/g, "") || 0);
+          if (!allow3digits && v < 1000) continue;
           if (v > max) { max = v; pick = a; }
         }
         return pick ? normalizeAmountCurrency(pick) : "";
       };
-      return best(yenOrDollar) || best(numericLoose) || "";
+      const byCurrency = best(yenOrDollar, true);
+      if (byCurrency) return byCurrency;
+      return best(numericLoose, false) || best(numericLoose, true) || "";
     }
 
     function findAmountStrict(line) {
@@ -576,24 +559,24 @@
       if (m) return normalizeAmountCurrency(m[0]);
       m = line.match(/\b\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?\b/);
       if (m) return normalizeAmountCurrency(m[0]);
-      m = line.match(/\b\d{4,}(?:\.\d{1,2})?\b/);
+      m = line.match(/\b(?!20\d{2}\b)\d{4,}(?:\.\d{1,2})?\b/);
       if (m) return normalizeAmountCurrency(m[0]);
       return "";
     }
-
     function allAmountsInLine(line) {
       const out = [];
       const re = /([¥￥$]?\s*\d{1,3}(?:[,\d]{3})*(?:\.\d{1,2})?\s*(円|¥|￥|\$|USD)?)/gi;
       let m;
       while ((m = re.exec(line)) !== null) {
         const s = (m[0] || "").trim();
-        if (/\d-\d|〒\s*\d{3}-\d{4}/.test(s)) continue;
+        if (/\b\d{2,4}-\d{2,4}-\d{3,4}\b/.test(s)) continue;
+        if (/〒\s*\d{3}-\d{4}/.test(s)) continue;
         if (/\b20\d{2}\b/.test(s) && !/[円¥￥$]/.test(s)) continue;
-        if (s) out.push(s);
+        if (!/\d/.test(s)) continue;
+        out.push(s);
       }
       return out;
     }
-
     function sumCurrency(a, b) {
       const curA = /USD|\$/i.test(a) ? "$" : /(円|¥|￥)/.test(a) ? "¥" : "";
       const curB = /USD|\$/i.test(b) ? "$" : /(円|¥|￥)/.test(b) ? "¥" : "";
@@ -604,7 +587,6 @@
       }
       return "";
     }
-
     function normalizeAmountCurrency(s){
       const hasUSD = /USD|\$/i.test(s);
       const hasJPY = /(円|¥|￥)/.test(s);
@@ -616,7 +598,7 @@
       return currency + intFmt + (dec ? "." + dec : "");
     }
 
-    // ======== Render / Save ========
+    /* ================= Render / Save ================= */
     function renderTable(){
       const L=I18N[getLang()];
       resultBody.innerHTML="";
@@ -639,7 +621,6 @@
       text("countBadge", `${queue.length}${getLang()==="ja"?L.countUnit:""}`);
     }
     function esc(s){ return (s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
-
     function guardPaid(){
       const L=I18N[getLang()];
       if(!isPaidSession()){ alert(L.alertNeedPay); return false; }
@@ -653,9 +634,8 @@
       a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url);
     }
 
-    // ======== Boot ========
+    /* ================= Boot ================= */
     (function boot(){
-      // 戻り後の言語復元
       const ssLang = sessionStorage.getItem(LAST_LANG_SS);
       if(ssLang){ localStorage.setItem(UI_LANG_KEY, ssLang); }
       const urlLang=getLangFromURL(); if(urlLang) localStorage.setItem(UI_LANG_KEY,urlLang);
