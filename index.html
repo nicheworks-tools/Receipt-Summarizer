@@ -44,6 +44,7 @@
   <script src="https://unpkg.com/tesseract.js@5.0.3/dist/tesseract.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script>
+    // pdf.js worker
     window.pdfjsLib.GlobalWorkerOptions.workerSrc =
       "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
   </script>
@@ -145,7 +146,7 @@
     const UI_LANG_KEY = "rs_ui_lang";
     const LAST_LANG_SS = "rs_last_lang_for_return";
 
-    // Tesseract options（自己ホストの worker/wasm を参照）
+    // Tesseract（自己ホスト）
     const TESSERACT_OPTS = {
       workerPath: "/worker.min.js",
       corePath:   "/tesseract-core.wasm.js",
@@ -361,24 +362,28 @@
       const { data } = await Tesseract.recognize(imageOrDataUrl, "jpn+eng", TESSERACT_OPTS);
       return data.text || "";
     }
+
     async function readAsTextViaOCR(file){
       if (/\.pdf$/i.test(file.name)) return await readPdfSmart(file);
       return await ocrImageSmart(file);
     }
-    // PDF：テキスト直抽出 → だめならレンダ→OCR
+
+    // PDF：まずテキスト抽出（埋め込み文字のPDFはOCRしない）。ダメな時だけレンダ→OCR。
     async function readPdfSmart(file){
       const buf = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+
+      // 1) テキスト抽出
       let textAll = "";
       for (let p=1; p<=pdf.numPages; p++){
         const page = await pdf.getPage(p);
         const tc = await page.getTextContent();
-        const s  = tc.items.map(it=>it.str).join("\n").trim();
-        if (s.length > 10) textAll += "\n" + s;
+        const s  = tc.items.map(it=>it.str).join("\n").replace(/\u00A0/g," ").trim();
+        textAll += (s ? ("\n" + s) : "");
       }
-      if (textAll.trim().length >= 10) return textAll;
+      if (textAll.trim().length >= 10) return textAll; // 充分ならここで終了
 
-      // フォールバック：レンダ→OCR
+      // 2) フォールバック：レンダ→OCR
       let ocrAll = "";
       for (let p=1; p<=pdf.numPages; p++){
         const page = await pdf.getPage(p);
@@ -393,7 +398,8 @@
       }
       return ocrAll;
     }
-    // 画像：グレイスケール＋コントラスト
+
+    // 画像：簡易前処理（グレイスケール＋コントラスト）
     async function ocrImageSmart(file){
       const img = await createImageBitmap(file);
       const scale = Math.min(2000/Math.max(img.width,img.height), 2.5);
@@ -458,20 +464,24 @@
 
       const date  = pickDate(raw);
       const total = pickTotal(lines, raw);
+      const store = pickStore(lines, filename);
 
-      // 店名候補（強化版）
+      return { store, date, total, note:"" };
+    }
+
+    // 店名抽出（ノイズ除去＋会社名/英字店名優先）
+    function pickStore(lines, filename){
       const ban = /(〒|郵便|TEL|電話|FAX|URL|http|https|税|合計|小計|ご請求|領収|明細|RECEIPT|INVOICE|SUBTOTAL|TOTAL|AMOUNT|お会計|伝票|番号|No\.?)/i;
       const orgWords = /(株式会社|有限会社|合同会社|Inc\.?|LLC|Co\.|Company|Cafe|カフェ|ショップ|堂|商店|ストア|店)/i;
-
-      let store = "";
       const head = lines.slice(0,15);
+      let store = "";
+
       for(const s of head){ if(!s||ban.test(s)) continue; if(orgWords.test(s)){ store=s.replace(/^[\-\*●\s]+/,"").trim(); break; } }
       if(!store){ for(const s of head){ if(ban.test(s)) continue; if(/[A-Za-z\u30A0-\u30FF][A-Za-z\u30A0-\u30FF\s.'-]{2,}/.test(s)){ store=s.replace(/^[\-\*●\s]+/,"").trim(); break; } } }
       if(!store){ for(const s of head){ if(!s||ban.test(s)) continue; if(!/[0-9０-９]/.test(s) && s.length>=2){ store=s.replace(/^[\-\*●\s]+/,"").trim(); break; } } }
       if(!store && filename) store = filename.replace(/\.(pdf|png|jpe?g)$/i,"");
       if(store === "..." || store.length <= 1) store = "";
-
-      return { store, date, total, note:"" };
+      return store;
     }
 
     // 日付抽出
@@ -492,7 +502,7 @@
       return `${yearStr}-${mm}-${dd}`;
     }
 
-    // 金額抽出（強化）
+    // 金額抽出（合計行優先＋ノイズ除外）
     function pickTotal(lines, raw) {
       const isNoise = (s) =>
         /(TEL|電話|FAX|〒|郵便|住所|http|https|番地|丁目|chome|Building|Bldg)/i.test(s) ||
@@ -500,6 +510,7 @@
 
       const totalKey = /(合計金額|総合計|合計|ご請求金額|お会計|お支払金額|税込合計|TOTAL|AMOUNT DUE|Grand Total|Balance Due)/i;
 
+      // ① 「合計」行とその近辺を最優先
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         if (totalKey.test(line.replace(/\s/g,""))) {
@@ -511,6 +522,7 @@
         }
       }
 
+      // ② 「小計」「税」から推定
       const subtotalKey = /(小計|SUBTOTAL)/i;
       const taxKey = /(税|消費税|税込|TAX)/i;
       let subtotal = null, tax = null;
@@ -528,6 +540,7 @@
         if (sum) return sum;
       }
 
+      // ③ 全行から通貨付き最優先 → 数値のみ（4桁以上を優先）
       const yenOrDollar = [];
       const numericLoose = [];
       for (const s of lines) {
@@ -542,7 +555,7 @@
         let pick = "", max = 0;
         for (const a of list) {
           const v = Number(a.replace(/[^\d.]/g, "") || 0);
-          if (!allow3digits && v < 1000) continue;
+          if (!allow3digits && v < 1000) continue; // 3桁は基本除外
           if (v > max) { max = v; pick = a; }
         }
         return pick ? normalizeAmountCurrency(pick) : "";
@@ -563,20 +576,22 @@
       if (m) return normalizeAmountCurrency(m[0]);
       return "";
     }
+
     function allAmountsInLine(line) {
       const out = [];
       const re = /([¥￥$]?\s*\d{1,3}(?:[,\d]{3})*(?:\.\d{1,2})?\s*(円|¥|￥|\$|USD)?)/gi;
       let m;
       while ((m = re.exec(line)) !== null) {
         const s = (m[0] || "").trim();
-        if (/\b\d{2,4}-\d{2,4}-\d{3,4}\b/.test(s)) continue;
-        if (/〒\s*\d{3}-\d{4}/.test(s)) continue;
-        if (/\b20\d{2}\b/.test(s) && !/[円¥￥$]/.test(s)) continue;
+        if (/\b\d{2,4}-\d{2,4}-\d{3,4}\b/.test(s)) continue;  // 電話
+        if (/〒\s*\d{3}-\d{4}/.test(s)) continue;              // 郵便
+        if (/\b20\d{2}\b/.test(s) && !/[円¥￥$]/.test(s)) continue; // 年単独
         if (!/\d/.test(s)) continue;
         out.push(s);
       }
       return out;
     }
+
     function sumCurrency(a, b) {
       const curA = /USD|\$/i.test(a) ? "$" : /(円|¥|￥)/.test(a) ? "¥" : "";
       const curB = /USD|\$/i.test(b) ? "$" : /(円|¥|￥)/.test(b) ? "¥" : "";
@@ -587,6 +602,7 @@
       }
       return "";
     }
+
     function normalizeAmountCurrency(s){
       const hasUSD = /USD|\$/i.test(s);
       const hasJPY = /(円|¥|￥)/.test(s);
@@ -620,7 +636,7 @@
       text("sessionBadge", "session: " + (isPaidSession()?"pro":"guest"));
       text("countBadge", `${queue.length}${getLang()==="ja"?L.countUnit:""}`);
     }
-    function esc(s){ return (s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
+    function esc(s){ return (s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;"," >":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
     function guardPaid(){
       const L=I18N[getLang()];
       if(!isPaidSession()){ alert(L.alertNeedPay); return false; }
